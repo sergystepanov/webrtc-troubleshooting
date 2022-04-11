@@ -1,4 +1,4 @@
-package html
+package webui
 
 import (
 	"embed"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed web
+//go:embed client
 var web embed.FS
 
 // Index handles the web content root content (index page)
