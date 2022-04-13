@@ -11,7 +11,7 @@ var web embed.FS
 
 // Index handles the web content root content (index page)
 func Index() (http.Handler, error) {
-	content, err := fs.Sub(fs.FS(web), "web")
+	content, err := fs.Sub(fs.FS(web), "client")
 	if err != nil {
 		return nil, err
 	}

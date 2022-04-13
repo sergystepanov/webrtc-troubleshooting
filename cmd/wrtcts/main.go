@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/signal"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webui"
 )
 
@@ -18,6 +19,7 @@ func main() {
 		log.Fatalf("web content fail, %v", err)
 	}
 	http.Handle("/", index)
+	http.Handle("/websocket", signal.Signalling())
 
 	log.Printf("Listening on %s...", *webAddress)
 	if err = http.ListenAndServe(*webAddress, nil); err != nil {
