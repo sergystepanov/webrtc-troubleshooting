@@ -8,6 +8,7 @@
 <span>Hello!</span>
 <div class="controls">
     <button id="controls__start">Start</button>
+    <button id="controls__stop">Stop</button>
 </div>
 <div class="state">
     <h2>ICE</h2>
@@ -22,7 +23,7 @@
     const socket = (() => {
         const handlers = {};
         let _socket;
-        const connect = () => {
+        const connect = () => new Promise(function (resolve, reject) {
             _socket = new WebSocket(`ws://${window.location.host}/websocket`)
             _socket.onmessage = e => {
                 const msg = JSON.parse(e.data)
@@ -33,24 +34,37 @@
                     handlers[val](msg)
                 });
             }
-            _socket.onopen = () => {
+            _socket.onopen = (e) => {
                 console.log('socket opened')
+                resolve(e)
             }
-        }
-        const addHandler = (id, handler) => handlers[id] = handler
+            _socket.onerror = (e) => {
+                reject(e)
+            }
+        })
+        const handler = (id, handler) => handlers[id] = handler
 
         const send = (data) => _socket.send(data)
 
+        const disconnect = () => _socket.close()
+
         return {
-            addHandler,
             connect,
+            disconnect,
             send,
+            handler,
         }
     })();
 
     const webrtc = (() => {
-        const connect = (signal) => {
-            const pc = new RTCPeerConnection({iceServers: [{urls: 'stun:stun.l.google.com:19302'}]})
+        let pc
+        let _signal
+
+        const connect = async (signal) => {
+            await signal.connect()
+            // !to add error handler
+            _signal = signal
+            pc = new RTCPeerConnection({iceServers: [{urls: 'stun:stun.l.google.com:19302'}]})
 
             pc.oniceconnectionstatechange = () => {
                 let el = document.createElement('p')
@@ -70,7 +84,7 @@
                 signal.send(e.candidate)
             }
 
-            signal.onMessage((message) => {
+            signal.wire((message) => {
                 if (message.candidate) {
                     pc.addIceCandidate(message)
                 } else {
@@ -83,28 +97,39 @@
                 signal.send(offer);
             })
         }
+        const disconnect = () => {
+            if (!pc) return
+
+            pc.close()
+            _signal.disconnect()
+        }
         return {
             connect,
+            disconnect,
         }
     })();
 
+
     const signal = (() => {
-        let messageHandler = () => ({})
-
-        socket.addHandler('signal', (m) => messageHandler(m))
-
-        return {
-            onMessage: (handler) => messageHandler = handler,
-            send: (data) => socket.send(JSON.stringify(data))
-        }
-    })(socket);
+        const SIGNAL = 'x'
+        return ({transport = {send: () => ({}), handler: () => ({})}}) => ({
+            wire: (handler) => {
+                transport.handler(SIGNAL, handler)
+            },
+            send: (dat) => transport.send(JSON.stringify(dat)),
+            connect: async () => transport.connect(),
+            disconnect: () => transport.disconnect()
+        })
+    })();
 
     (() => {
-        socket.connect()
-
         const startEl = document.getElementById('controls__start');
+        const stopEl = document.getElementById('controls__stop');
         startEl.addEventListener('click', () => {
-            webrtc.connect(signal);
+            webrtc.connect(signal({transport: socket}));
+        })
+        stopEl.addEventListener('click', () => {
+            webrtc.disconnect()
         })
     })()
 </script>
