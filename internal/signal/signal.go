@@ -11,14 +11,13 @@ import (
 
 func Signalling() websocket.Handler { return WebsocketServer }
 
-// WebsocketServer is called for every new inbound WebSocket
 func WebsocketServer(ws *websocket.Conn) {
-	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	peer, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		panic(err)
 	}
 
-	peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
+	peer.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c == nil {
 			return
 		}
@@ -33,11 +32,11 @@ func WebsocketServer(ws *websocket.Conn) {
 		}
 	})
 
-	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
+	peer.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
 	})
 
-	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
+	peer.OnDataChannel(func(d *webrtc.DataChannel) {
 		d.OnOpen(func() {
 			for range time.Tick(time.Second * 3) {
 				if err = d.SendText(time.Now().String()); err != nil {
@@ -49,7 +48,6 @@ func WebsocketServer(ws *websocket.Conn) {
 
 	buf := make([]byte, 1500)
 	for {
-		// Read each inbound WebSocket Message
 		n, err := ws.Read(buf)
 		if err != nil {
 			panic(err)
@@ -62,19 +60,17 @@ func WebsocketServer(ws *websocket.Conn) {
 		)
 
 		switch {
-		// Attempt to unmarshal as a SessionDescription. If the SDP field is empty
-		// assume it is not one.
 		case json.Unmarshal(buf[:n], &offer) == nil && offer.SDP != "":
-			if err = peerConnection.SetRemoteDescription(offer); err != nil {
+			if err = peer.SetRemoteDescription(offer); err != nil {
 				panic(err)
 			}
 
-			answer, answerErr := peerConnection.CreateAnswer(nil)
+			answer, answerErr := peer.CreateAnswer(nil)
 			if answerErr != nil {
 				panic(answerErr)
 			}
 
-			if err = peerConnection.SetLocalDescription(answer); err != nil {
+			if err = peer.SetLocalDescription(answer); err != nil {
 				panic(err)
 			}
 
@@ -89,7 +85,7 @@ func WebsocketServer(ws *websocket.Conn) {
 		// Attempt to unmarshal as a ICECandidateInit. If the candidate field is empty
 		// assume it is not one.
 		case json.Unmarshal(buf[:n], &candidate) == nil && candidate.Candidate != "":
-			if err = peerConnection.AddICECandidate(candidate); err != nil {
+			if err = peer.AddICECandidate(candidate); err != nil {
 				panic(err)
 			}
 		default:

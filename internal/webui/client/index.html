@@ -6,62 +6,106 @@
 </head>
 <body>
 <span>Hello!</span>
-<h3> ICE Connection States </h3>
-<div id="iceConnectionStates"></div>
-<br/>
-
-<h3> Inbound DataChannel Messages </h3>
-<div id="inboundDataChannelMessages"></div>
+<div class="controls">
+    <button id="controls__start">Start</button>
+</div>
+<div class="state">
+    <h2>ICE</h2>
+    <div id="iceConnectionStates"></div>
+</div>
+<div class="messaging">
+    <h2>Data messages</h2>
+    <div id="inboundDataChannelMessages"></div>
+</div>
 </body>
 <script>
-    const socket = new WebSocket(`ws://${window.location.host}/websocket`)
-    let pc = new RTCPeerConnection({
-        iceServers: [
-            {
-                urls: 'stun:stun.l.google.com:19302'
+    const socket = (() => {
+        const handlers = {};
+        let _socket;
+        const connect = () => {
+            _socket = new WebSocket(`ws://${window.location.host}/websocket`)
+            _socket.onmessage = e => {
+                const msg = JSON.parse(e.data)
+                if (!msg) {
+                    return console.log('failed to parse msg')
+                }
+                Object.getOwnPropertyNames(handlers).forEach(function (val) {
+                    handlers[val](msg)
+                });
             }
-        ]
-    })
-
-    socket.onmessage = e => {
-        let msg = JSON.parse(e.data)
-        if (!msg) {
-            return console.log('failed to parse msg')
+            _socket.onopen = () => {
+                console.log('socket opened')
+            }
         }
+        const addHandler = (id, handler) => handlers[id] = handler
 
-        if (msg.candidate) {
-            pc.addIceCandidate(msg)
-        } else {
-            pc.setRemoteDescription(msg)
+        const send = (data) => _socket.send(data)
+
+        return {
+            addHandler,
+            connect,
+            send,
         }
-    }
+    })();
 
-    let dc = pc.createDataChannel('data')
-    dc.onmessage = event => {
-        let el = document.createElement('p')
-        el.appendChild(document.createTextNode(event.data))
+    const webrtc = (() => {
+        const connect = (signal) => {
+            const pc = new RTCPeerConnection({iceServers: [{urls: 'stun:stun.l.google.com:19302'}]})
 
-        document.getElementById('inboundDataChannelMessages').appendChild(el);
-    }
+            pc.oniceconnectionstatechange = () => {
+                let el = document.createElement('p')
+                el.appendChild(document.createTextNode(pc.iceConnectionState))
+                document.getElementById('iceConnectionStates').appendChild(el);
+            }
 
-    pc.onicecandidate = e => {
-        if (e.candidate && e.candidate.candidate !== "") {
-            socket.send(JSON.stringify(e.candidate))
+            let dc = pc.createDataChannel('data')
+            dc.onmessage = event => {
+                let el = document.createElement('p')
+                el.appendChild(document.createTextNode(event.data))
+                document.getElementById('inboundDataChannelMessages').appendChild(el);
+            }
+
+            pc.onicecandidate = e => {
+                if (!(e.candidate && e.candidate.candidate !== "")) return
+                signal.send(e.candidate)
+            }
+
+            signal.onMessage((message) => {
+                if (message.candidate) {
+                    pc.addIceCandidate(message)
+                } else {
+                    pc.setRemoteDescription(message)
+                }
+            })
+
+            pc.createOffer().then(offer => {
+                pc.setLocalDescription(offer)
+                signal.send(offer);
+            })
         }
-    }
+        return {
+            connect,
+        }
+    })();
 
-    pc.oniceconnectionstatechange = () => {
-        let el = document.createElement('p')
-        el.appendChild(document.createTextNode(pc.iceConnectionState))
+    const signal = (() => {
+        let messageHandler = () => ({})
 
-        document.getElementById('iceConnectionStates').appendChild(el);
-    }
+        socket.addHandler('signal', (m) => messageHandler(m))
 
-    socket.onopen = () => {
-        pc.createOffer().then(offer => {
-            pc.setLocalDescription(offer)
-            socket.send(JSON.stringify(offer))
+        return {
+            onMessage: (handler) => messageHandler = handler,
+            send: (data) => socket.send(JSON.stringify(data))
+        }
+    })(socket);
+
+    (() => {
+        socket.connect()
+
+        const startEl = document.getElementById('controls__start');
+        startEl.addEventListener('click', () => {
+            webrtc.connect(signal);
         })
-    }
+    })()
 </script>
 </html>
