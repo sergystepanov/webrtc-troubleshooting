@@ -11,18 +11,19 @@ import (
 
 func main() {
 	// read cmd flags
-	webAddress := flag.String("addr", ":3000", "a web server address")
+	live := flag.Bool("live", true, "use live webui")
+	addr := flag.String("addr", ":3000", "a web server address")
 	flag.Parse()
 
-	index, err := webui.Index()
+	index, err := webui.Index(*live)
 	if err != nil {
 		log.Fatalf("web content fail, %v", err)
 	}
 	http.Handle("/", index)
 	http.Handle("/websocket", signal.Signalling())
 
-	log.Printf("Listening on %s...", *webAddress)
-	if err = http.ListenAndServe(*webAddress, nil); err != nil {
+	log.Printf("Listening on %s...", *addr)
+	if err = http.ListenAndServe(*addr, nil); err != nil {
 		log.Fatal(err)
 	}
 }
