@@ -81,20 +81,23 @@
 
             pc.onicecandidate = e => {
                 if (!(e.candidate && e.candidate.candidate !== "")) return
-                signal.send(e.candidate)
+                signal.send({t: "ICE", p: e.candidate})
             }
 
             signal.wire((message) => {
-                if (message.candidate) {
-                    pc.addIceCandidate(message)
-                } else {
-                    pc.setRemoteDescription(message)
+                switch (message.t) {
+                    case "ANSWER":
+                        pc.setRemoteDescription(message.p)
+                        return
+                    case "ICE":
+                        pc.addIceCandidate(message.p)
+                        return
                 }
             })
 
             pc.createOffer().then(offer => {
                 pc.setLocalDescription(offer)
-                signal.send(offer);
+                signal.send({t:"OFFER", p: offer});
             })
         }
         const disconnect = () => {

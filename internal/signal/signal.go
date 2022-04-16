@@ -13,6 +13,7 @@ import (
 func Signalling() websocket.Handler {
 	return func(ws *websocket.Conn) {
 		done := make(chan bool)
+		// !to move messages into signal
 		messages := make(chan string, 100)
 
 		_log := func(format string, v ...any) {
@@ -31,9 +32,14 @@ func Signalling() websocket.Handler {
 				return
 			}
 
-			outbound, marshalErr := json.Marshal(c.ToJSON())
-			if marshalErr != nil {
-				panic(marshalErr)
+			message := ICE{
+				T:       MessageICE,
+				Payload: c.ToJSON(),
+			}
+			outbound, err := json.Marshal(message)
+			if err != nil {
+				_log("err: %v", err)
+				return
 			}
 
 			if _, err = ws.Write(outbound); err != nil {
@@ -65,7 +71,6 @@ func Signalling() websocket.Handler {
 						_log("STOP TICKER!")
 						return
 					case t := <-ticker.C:
-						_log("state: %v - t", d.ReadyState())
 						send(t.String())
 					case m := <-messages:
 						send(m)
@@ -84,54 +89,62 @@ func Signalling() websocket.Handler {
 			}
 		}()
 
+		// !to make sure that the buffer is enough
 		buf := make([]byte, 1500)
 		for {
 			n, err := ws.Read(buf)
 			if err != nil {
-				log.Printf("err: %v", err)
+				_log("err: %v", err)
 				return
 			}
 
-			var (
-				candidate webrtc.ICECandidateInit
-				offer     webrtc.SessionDescription
-			)
+			var m Message
+			if err = json.Unmarshal(buf[:n], &m); err != nil {
+				_log("err: %v, unknown message: %v", err, buf)
+				continue
+			}
 
-			switch {
-			case json.Unmarshal(buf[:n], &offer) == nil && offer.SDP != "":
-				if err = peer.SetRemoteDescription(offer); err != nil {
-					log.Printf("err: %v", err)
+			switch m.T {
+			case MessageOffer:
+				var offer webrtc.SessionDescription
+				if json.Unmarshal(m.Payload, &offer) == nil && offer.SDP != "" {
+					if err = peer.SetRemoteDescription(offer); err != nil {
+						_log("err: %v", err)
+						return
+					}
+				}
+				answer, err := peer.CreateAnswer(nil)
+				if err != nil {
+					_log("err: %v", err)
 					return
 				}
-
-				answer, answerErr := peer.CreateAnswer(nil)
-				if answerErr != nil {
-					log.Printf("err: %v", err)
-					return
-				}
-
 				if err = peer.SetLocalDescription(answer); err != nil {
-					log.Printf("err: %v", err)
+					_log("err: %v", err)
 					return
 				}
-
-				outbound, marshalErr := json.Marshal(answer)
-				if marshalErr != nil {
-					log.Printf("err: %v", err)
+				message := Answer{
+					T:       MessageAnswer,
+					Payload: answer,
+				}
+				outbound, err := json.Marshal(message)
+				if err != nil {
+					_log("err: %v", err)
 					return
 				}
-
 				if _, err = ws.Write(outbound); err != nil {
-					log.Printf("err: %v", err)
+					_log("err: %v", err)
 					return
 				}
-			case json.Unmarshal(buf[:n], &candidate) == nil && candidate.Candidate != "":
-				if err = peer.AddICECandidate(candidate); err != nil {
-					log.Printf("err: %v", err)
-					return
+			case MessageICE:
+				var candidate webrtc.ICECandidateInit
+				if json.Unmarshal(m.Payload, &candidate) == nil && candidate.Candidate != "" {
+					if err = peer.AddICECandidate(candidate); err != nil {
+						_log("err: %v", err)
+						return
+					}
 				}
 			default:
-				log.Printf("err: %v", "Unknown message")
+				_log("err: unknown message [%v]", m.T)
 				return
 			}
 		}
