@@ -2,7 +2,9 @@ package signal
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -10,11 +12,31 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+const socketReadBuffer = 1500
+
 func Signalling() websocket.Handler {
-	return func(ws *websocket.Conn) {
+	return func(conn *websocket.Conn) {
 		done := make(chan bool)
 		// !to move messages into signal
 		messages := make(chan string, 100)
+
+		go func() {
+			defer log.Printf("STOP SIGNALE ROUTINE")
+			for {
+				select {
+				case <-done:
+					log.Printf("SIGNAL STOP!")
+					return
+				case m := <-messages:
+					if dat, err := NewLog(m); err == nil {
+						if _, err := conn.Write(dat); err != nil {
+							log.Printf("err: %v", err)
+							return
+						}
+					}
+				}
+			}
+		}()
 
 		_log := func(format string, v ...any) {
 			m := fmt.Sprintf(format, v...)
@@ -31,18 +53,12 @@ func Signalling() websocket.Handler {
 			if c == nil {
 				return
 			}
-
-			message := ICE{
-				T:       MessageICE,
-				Payload: c.ToJSON(),
-			}
-			outbound, err := json.Marshal(message)
+			outbound, err := NewIce(*c)
 			if err != nil {
 				_log("err: %v", err)
 				return
 			}
-
-			if _, err = ws.Write(outbound); err != nil {
+			if _, err = conn.Write(outbound); err != nil {
 				panic(err)
 			}
 		})
@@ -72,8 +88,6 @@ func Signalling() websocket.Handler {
 						return
 					case t := <-ticker.C:
 						send(t.String())
-					case m := <-messages:
-						send(m)
 					}
 				}
 			})
@@ -90,10 +104,13 @@ func Signalling() websocket.Handler {
 		}()
 
 		// !to make sure that the buffer is enough
-		buf := make([]byte, 1500)
+		buf := make([]byte, socketReadBuffer)
 		for {
-			n, err := ws.Read(buf)
-			if err != nil {
+			n, err := conn.Read(buf)
+			if errors.Is(err, io.EOF) {
+				log.Printf("Signal has been closed!")
+				return
+			} else if err != nil {
 				_log("err: %v", err)
 				return
 			}
@@ -122,16 +139,13 @@ func Signalling() websocket.Handler {
 					_log("err: %v", err)
 					return
 				}
-				message := Answer{
-					T:       MessageAnswer,
-					Payload: answer,
-				}
-				outbound, err := json.Marshal(message)
+
+				outbound, err := NewAnswer(answer)
 				if err != nil {
 					_log("err: %v", err)
 					return
 				}
-				if _, err = ws.Write(outbound); err != nil {
+				if _, err = conn.Write(outbound); err != nil {
 					_log("err: %v", err)
 					return
 				}

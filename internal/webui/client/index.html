@@ -3,20 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <title>WebRTC Troubleshooting</title>
+    <style>
+        .container {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container__main {
+            flex-grow: 1;
+
+            display: flex;
+            flex-direction: row;
+        }
+
+        .container__left {
+            width: 25%;
+        }
+
+        .container__middle {
+            flex-grow: 1;
+        }
+
+        .container__right {
+            width: 20%;
+        }
+
+        .cards {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            margin-left: -8px;
+            margin-right: -8px;
+        }
+
+        .cards__item {
+            flex-basis: 25%;
+
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+
+        .log {
+            align-items: center;
+            display: flex;
+        }
+
+        .log__status {
+            background-color: rgb(66, 153, 225);
+
+            border-radius: 9999px;
+
+            height: 8px;
+            width: 8px;
+
+            margin-right: 8px;
+        }
+
+        .log__content {
+            flex: 1;
+        }
+
+        .options {
+            align-items: center;
+            display: flex;
+
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+
+            margin: 0;
+            padding: 8px 0;
+        }
+
+        .options dd {
+            margin: 0;
+        }
+
+        div#inboundDataChannelMessages, div#iceConnectionStates {
+            height: 100px;
+            overflow: auto;
+            font-size: 80%;
+        }
+    </style>
 </head>
 <body>
-<span>Hello!</span>
-<div class="controls">
-    <button id="controls__start">Start</button>
-    <button id="controls__stop">Stop</button>
-</div>
-<div class="state">
-    <h2>ICE</h2>
-    <div id="iceConnectionStates"></div>
-</div>
-<div class="messaging">
-    <h2>Data messages</h2>
-    <div id="inboundDataChannelMessages"></div>
+<div class="container">
+    <header>
+        WebRTC Troubleshooting Tool
+    </header>
+    <main class="container__main">
+        <div class="container__left">...</div>
+
+        <div class="container__middle">
+            <div class="controls">
+                <button id="controls__start">Start</button>
+                <button id="controls__stop">Stop</button>
+            </div>
+            <div class="cards">
+                <div class="cards__item">
+                    <div class="state">
+                        <h3>ICE</h3>
+                        <div id="iceConnectionStates"></div>
+                    </div>
+                </div>
+
+                <div class="cards__item">
+                    <div class="messaging">
+                        <h3>Data channel</h3>
+                        <div id="inboundDataChannelMessages"></div>
+                    </div>
+                </div>
+                <div class="cards__item">
+                    <h3>Audio channel</h3>
+                </div>
+                <div class="cards__item">
+                    <h3>Video channel</h3>
+                </div>
+            </div>
+            <div class="logging">
+                <h3>Log</h3>
+                <div id="logMessages"></div>
+            </div>
+
+        </div>
+
+        <div class="container__right">
+            <h4>Options </h4>
+            <dl class="options">
+                <dt>Disable default Interceptors</dt>
+                <dd><input type="checkbox"/></dd>
+            </dl>
+            <dl class="options">
+                <dt>Set DTLS role</dt>
+                <dd><input type="text"/></dd>
+            </dl>
+            <dl class="options">
+                <dt>Use ICE Lite</dt>
+                <dd><input type="checkbox"/></dd>
+            </dl>
+            <dl class="options">
+                <dt>Set a single port</dt>
+                <dd><input type="text"/></dd>
+            </dl>
+            <dl class="options">
+                <dt>Set NAT-IP-MAP</dt>
+                <dd><input type="text"/></dd>
+            </dl>
+        </div>
+    </main>
+    <footer>
+        ...
+    </footer>
 </div>
 </body>
 <script>
@@ -76,7 +213,7 @@
             dc.onmessage = event => {
                 let el = document.createElement('p')
                 el.appendChild(document.createTextNode(event.data))
-                document.getElementById('inboundDataChannelMessages').appendChild(el);
+                document.getElementById('inboundDataChannelMessages').prepend(el);
             }
 
             pc.onicecandidate = e => {
@@ -92,12 +229,21 @@
                     case "ICE":
                         pc.addIceCandidate(message.p)
                         return
+                    case "LOG":
+                        const el = document.createElement('div')
+                        el.classList.add("log")
+                        el.innerHTML = `
+                        <div class="log__status"></div>
+                        <div class="log__content">${message.p.text}</div>
+                        `
+                        document.getElementById('logMessages').appendChild(el);
+                        return
                 }
             })
 
             pc.createOffer().then(offer => {
                 pc.setLocalDescription(offer)
-                signal.send({t:"OFFER", p: offer});
+                signal.send({t: "OFFER", p: offer});
             })
         }
         const disconnect = () => {
