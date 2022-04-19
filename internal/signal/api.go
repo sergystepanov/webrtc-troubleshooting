@@ -34,6 +34,7 @@ type (
 		Payload webrtc.ICECandidateInit `json:"p"`
 	}
 	Log struct {
+		Tag  string    `json:"tag"`
 		Time time.Time `json:"time"`
 		Text string    `json:"text"`
 	}
@@ -49,12 +50,13 @@ func NewAnswer(sdp webrtc.SessionDescription) ([]byte, error) {
 func NewIce(candidate webrtc.ICECandidate) ([]byte, error) {
 	return json.Marshal(ICE{TypedMessage: TypedMessage{T: MessageICE}, Payload: candidate.ToJSON()})
 }
-func NewLog(data string) ([]byte, error) {
+func NewLog(l Log) ([]byte, error) {
 	return json.Marshal(LogMessage{
 		TypedMessage: TypedMessage{T: MessageLog},
 		Payload: Log{
+			Tag:  l.Tag,
 			Time: time.Now(),
-			Text: data,
+			Text: l.Text,
 		},
 	})
 }

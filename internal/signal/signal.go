@@ -18,7 +18,7 @@ func Signalling() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		done := make(chan bool)
 		// !to move messages into signal
-		messages := make(chan string, 100)
+		messages := make(chan Log, 100)
 
 		go func() {
 			defer log.Printf("STOP SIGNALE ROUTINE")
@@ -38,10 +38,10 @@ func Signalling() websocket.Handler {
 			}
 		}()
 
-		_log := func(format string, v ...any) {
+		_log := func(tag string, format string, v ...any) {
 			m := fmt.Sprintf(format, v...)
 			log.Printf(m)
-			messages <- m
+			messages <- Log{Tag: tag, Text: m}
 		}
 
 		peer, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -55,7 +55,7 @@ func Signalling() websocket.Handler {
 			}
 			outbound, err := NewIce(*c)
 			if err != nil {
-				_log("err: %v", err)
+				_log("ice", "err: %v", err)
 				return
 			}
 			if _, err = conn.Write(outbound); err != nil {
@@ -64,7 +64,7 @@ func Signalling() websocket.Handler {
 		})
 
 		peer.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-			_log("ICE Connection State has changed: %s\n", connectionState.String())
+			_log("ice", "state → %s", connectionState.String())
 		})
 
 		peer.OnDataChannel(func(d *webrtc.DataChannel) {
@@ -84,7 +84,7 @@ func Signalling() websocket.Handler {
 				for {
 					select {
 					case <-done:
-						_log("STOP TICKER!")
+						_log("sys", "STOP TICKER!")
 						return
 					case t := <-ticker.C:
 						send(t.String())
@@ -111,13 +111,13 @@ func Signalling() websocket.Handler {
 				log.Printf("Signal has been closed!")
 				return
 			} else if err != nil {
-				_log("err: %v", err)
+				_log("sys", "err: %v", err)
 				return
 			}
 
 			var m Message
 			if err = json.Unmarshal(buf[:n], &m); err != nil {
-				_log("err: %v, unknown message: %v", err, buf)
+				_log("sys", "err: %v, unknown message: %v", err, buf)
 				continue
 			}
 
@@ -126,39 +126,39 @@ func Signalling() websocket.Handler {
 				var offer webrtc.SessionDescription
 				if json.Unmarshal(m.Payload, &offer) == nil && offer.SDP != "" {
 					if err = peer.SetRemoteDescription(offer); err != nil {
-						_log("err: %v", err)
+						_log("rtc", "err: %v", err)
 						return
 					}
 				}
 				answer, err := peer.CreateAnswer(nil)
 				if err != nil {
-					_log("err: %v", err)
+					_log("rtc", "err: %v", err)
 					return
 				}
 				if err = peer.SetLocalDescription(answer); err != nil {
-					_log("err: %v", err)
+					_log("rtc", "err: %v", err)
 					return
 				}
 
 				outbound, err := NewAnswer(answer)
 				if err != nil {
-					_log("err: %v", err)
+					_log("rtc", "err: %v", err)
 					return
 				}
 				if _, err = conn.Write(outbound); err != nil {
-					_log("err: %v", err)
+					_log("rtc", "err: %v", err)
 					return
 				}
 			case MessageICE:
 				var candidate webrtc.ICECandidateInit
 				if json.Unmarshal(m.Payload, &candidate) == nil && candidate.Candidate != "" {
 					if err = peer.AddICECandidate(candidate); err != nil {
-						_log("err: %v", err)
+						_log("ice", "err: %v", err)
 						return
 					}
 				}
 			default:
-				_log("err: unknown message [%v]", m.T)
+				_log("sys", "err: unknown message [%v]", m.T)
 				return
 			}
 		}
