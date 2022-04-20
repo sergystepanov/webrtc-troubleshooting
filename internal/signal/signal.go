@@ -64,7 +64,15 @@ func Signalling() websocket.Handler {
 		})
 
 		peer.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-			_log("ice", "state → %s", connectionState.String())
+			_log("ice", "→ %s", connectionState)
+		})
+
+		peer.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+			_log("rtc", "→ %s", state)
+		})
+
+		peer.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) {
+			_log("ice", "→ %s", state)
 		})
 
 		peer.OnDataChannel(func(d *webrtc.DataChannel) {

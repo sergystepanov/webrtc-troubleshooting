@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <title>WebRTC Testing & Troubleshooting Tool</title>
+    <link rel="icon" href="data:,">
     <style>
         .container {
             display: flex;
@@ -51,10 +54,22 @@
             padding-right: 8px;
         }
 
+        @keyframes append-animate {
+            from {
+                /*transform: scale(0);*/
+                opacity: 0;
+            }
+            to {
+                /*transform: scale(1);*/
+                opacity: 1;
+            }
+        }
+
         .log {
             align-items: center;
             display: grid;
             grid-template-columns: 15px 1fr 28fr;
+            animation: append-animate .3s linear;
         }
 
         .log div {
@@ -85,6 +100,10 @@
 
         .log__content {
             flex: 1;
+        }
+
+        .log.break {
+            margin: 0.3em 0;
         }
 
         .options {
@@ -119,36 +138,18 @@
 
         <div class="container__middle">
 
-            <!--            <div class="cards">-->
-            <!--                <div class="cards__item">-->
-            <!--                    <div class="state">-->
-            <!--                        <h3>ICE</h3>-->
-            <!--                        <div id="iceConnectionStates"></div>-->
-            <!--                    </div>-->
-            <!--                </div>-->
-
-            <!--                <div class="cards__item">-->
-            <!--                    <div class="messaging">-->
-            <!--                        <h3>Data channel</h3>-->
-            <!--                        <div id="inboundDataChannelMessages"></div>-->
-            <!--                    </div>-->
-            <!--                </div>-->
-            <!--                <div class="cards__item">-->
-            <!--                    <h3>Audio channel</h3>-->
-            <!--                </div>-->
-            <!--                <div class="cards__item">-->
-            <!--                    <h3>Video channel</h3>-->
-            <!--                </div>-->
-            <!--            </div>-->
             <div class="controls">
-                <button id="controls__start">Start</button>
-                <button id="controls__stop">Stop</button>
+                <button id="controls__button">Start</button>
             </div>
 
         </div>
 
         <div class="container__right">
             <h4>Options </h4>
+            <dl class="options">
+                <dt>Flip the offer and the answer sides</dt>
+                <dd><input type="checkbox"/></dd>
+            </dl>
             <dl class="options">
                 <dt>Disable default Interceptors</dt>
                 <dd><input type="checkbox"/></dd>
@@ -185,15 +186,15 @@
 
         const log = (message, server = true, tag) => {
             const el = document.createElement('div')
+            el.classList.add('log')
             if (message) {
-                el.classList.add("log")
                 el.innerHTML = `
                         <div class="log__status${server ? ' log__server' : ' log__client'}"></div>
                         ${tag ? `<div class="log__tag">${tag}</div>` : ''}
                         <div class="log__content">${message}</div>
                         `
             } else {
-                el.innerText = `-----------------------------------------------------------`
+                el.classList.add('break')
             }
             dest.appendChild(el)
         }
@@ -203,103 +204,122 @@
         }
     })()
 
-    const socket = (() => {
-        const handlers = {};
-        let _socket;
+    const socket = ({url}) => (() => {
+        let _socket, finish, handlers = [];
+        const log = (m) => gui.log(m, false, 'WS');
+
         const connect = () => new Promise(function (resolve, reject) {
-            _socket = new WebSocket(`ws://${window.location.host}/websocket`)
+            log(`connect to ${url}`)
+            _socket = new WebSocket(url)
             _socket.onmessage = e => {
                 const msg = JSON.parse(e.data)
                 if (!msg) {
-                    return console.log('failed to parse msg')
+                    log('error: failed to parse msg')
                 }
-                Object.getOwnPropertyNames(handlers).forEach(function (val) {
-                    handlers[val](msg)
-                });
+                handlers.forEach(h => h(msg))
             }
-            _socket.onopen = (e) => {
-                gui.log('socket opened', false, 'WS')
+            _socket.onopen = e => {
+                log('socket opened')
                 resolve(e)
             }
-            _socket.onerror = (e) => {
+            _socket.onclose = _ => {
+                finish()
+                log('socket closed')
+            }
+            _socket.onerror = e => {
+                log(`socket fail${e.message ? `: ${e.message}` : ''}`)
                 reject(e)
             }
         })
-        const handler = (id, handler) => handlers[id] = handler
 
-        const send = (data) => _socket.send(data)
-
-        const disconnect = () => _socket.close()
+        const disconnect = () => new Promise(function (resolve) {
+            if (!_socket) return;
+            finish = resolve
+            handlers = []
+            _socket.close()
+            _socket = null
+        })
 
         return {
             connect,
             disconnect,
-            send,
-            handler,
+            send: (data) => _socket.send(data),
+            set onmessage(handler) {
+                handlers.push(handler)
+            },
         }
     })();
 
-    const webrtc = (() => {
+    const webrtc = ({transport}) => (() => {
         let pc
-        let _signal
+        const log = {
+            ice: (m, remote = false) => gui.log(m, remote, 'ICE'),
+            rtc: (m, remote = false) => gui.log(m, remote, 'RTC'),
+        }
 
-        const connect = async (signal) => {
-            await signal.connect()
+        const signal = {
+            send: (dat) => transport.send(JSON.stringify(dat)),
+            connect: async _ => transport.connect(),
+            disconnect: async _ => transport.disconnect(),
+            set wire(handler) {
+                transport.onmessage = handler
+            }
+        }
+
+        const connect = async () => {
+            log.rtc('Start')
+            try {
+                await signal.connect()
+            } catch (e) {
+                return
+            }
+
             // !to add error handler
-            _signal = signal
             pc = new RTCPeerConnection({iceServers: [{urls: 'stun:stun.l.google.com:19302'}]})
 
-            pc.oniceconnectionstatechange = () => {
-                gui.log(`state → ${pc.iceConnectionState}`, false, 'ICE')
-            }
+            pc.onconnectionstatechange = _ => log.rtc(`→ ${pc.connectionState}`)
+            pc.oniceconnectionstatechange = _ => log.ice(`→ ${pc.iceConnectionState}`)
+            pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
 
             let dc = pc.createDataChannel('data')
-            dc.onmessage = event => {
-                // let el = document.createElement('p')
-                // el.appendChild(document.createTextNode(event.data))
-                // document.getElementById('inboundDataChannelMessages').prepend(el);
-                gui.log(`data chan: ${event.data}`, false, 'RTC')
-            }
+            dc.onmessage = event => log.rtc(`data chan: ${event.data}`, true)
 
             pc.onicecandidate = e => {
-                if (e.candidate) {
-                    gui.log(`local ${e.candidate.candidate}`, false, 'ICE')
-                    if (e.candidate.candidate === "") {
-                    } else {
-                        signal.send({t: "ICE", p: e.candidate})
-                    }
+                if (!e.candidate) return;
+                log.ice(`local ${e.candidate.candidate}`)
+                if (e.candidate.candidate === "") {
                 } else {
-                    gui.log(`gather done`, false, 'ICE')
+                    signal.send({t: "ICE", p: e.candidate})
                 }
             }
 
-            signal.wire((message) => {
+            signal.wire = (message) => {
                 switch (message.t) {
                     case "ANSWER":
                         pc.setRemoteDescription(message.p)
-                        gui.log(`SDP answer: ${message.p.sdp}`, true, 'RTC')
+                        log.rtc(`SDP answer: ${message.p.sdp}`, true)
                         return
                     case "ICE":
                         pc.addIceCandidate(message.p)
-                        gui.log(`remote ${message.p.candidate}`, true, 'ICE')
+                        log.ice(`remote ${message.p.candidate}`, true)
                         return
                     case "LOG":
                         gui.log(message.p.text, true, message.p.tag)
                         return
                 }
-            })
+            }
 
             pc.createOffer().then(offer => {
                 pc.setLocalDescription(offer)
                 signal.send({t: "OFFER", p: offer});
-                gui.log(`SDP offer: ${offer.sdp}`, false, 'RTC')
+                log.rtc(`SDP offer: ${offer.sdp}`)
             })
         }
-        const disconnect = () => {
+        const disconnect = async () => {
             if (!pc) return
-
             pc.close()
-            _signal.disconnect()
+            await signal.disconnect()
+            log.rtc('Stop')
         }
         return {
             connect,
@@ -307,30 +327,24 @@
         }
     })();
 
-
-    const signal = (() => {
-        const SIGNAL = 'x'
-        return ({transport = {send: () => ({}), handler: () => ({})}}) => ({
-            wire: (handler) => {
-                transport.handler(SIGNAL, handler)
-            },
-            send: (dat) => transport.send(JSON.stringify(dat)),
-            connect: async () => transport.connect(),
-            disconnect: () => transport.disconnect()
-        })
-    })();
-
     (() => {
-        const startEl = document.getElementById('controls__start');
-        const stopEl = document.getElementById('controls__stop');
-        startEl.addEventListener('click', () => {
-            webrtc.connect(signal({transport: socket}));
-        })
-        stopEl.addEventListener('click', () => {
-            webrtc.disconnect()
-            gui.log('Termination', false, 'RTC')
-            gui.log()
-        })
+        const server = webrtc({transport: socket({url: `ws://${window.location.host}/websocket`})});
+
+        (() => {
+            const control = document.getElementById('controls__button');
+            let active = false;
+            control.addEventListener('click', async () => {
+                active = !active
+                if (active) {
+                    control.textContent = 'Stop'
+                    await server.connect()
+                } else {
+                    control.textContent = 'Start'
+                    await server.disconnect()
+                    gui.log()
+                }
+            })
+        })()
     })()
 </script>
 </html>
