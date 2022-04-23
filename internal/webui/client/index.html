@@ -30,8 +30,9 @@
         .container__middle {
             flex-grow: 1;
             display: flex;
-            align-items: end;
-            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            /*justify-content: center;*/
         }
 
         .container__right {
@@ -126,6 +127,65 @@
             overflow: auto;
             font-size: 80%;
         }
+
+        .connection__pair {
+            display: flex;
+            flex: 10;
+            align-items: center;
+        }
+
+        .controls {
+            display: flex;
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 1rem;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .maze, .maze-odd {
+            position: relative;
+            height: 16px;
+        }
+
+        button {
+            color: #0051c3;
+            font-size: 13px;
+            border-color: #0045a6;
+            -webkit-transition-timing-function: ease;
+            transition-timing-function: ease;
+            -webkit-transition-duration: .2s;
+            transition-duration: .2s;
+            -webkit-transition-property: background-color, border-color, color;
+            transition-property: background-color, border-color, color;
+
+            padding: 0.5rem 1rem;
+
+            cursor: pointer;
+
+            border-width: 1px;
+            border-style: solid;
+            border-radius: 0.25rem;
+
+            --bg-opacity: 1;
+            background-color: #fff;
+            background-color: rgba(255, 255, 255, var(--bg-opacity));
+        }
+
+        button.small {
+            font-size: 10px;
+
+            padding: .2rem .5rem;
+            border: none;
+            background: aliceblue;
+        }
+
+        .logging__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -137,10 +197,7 @@
         <div class="container__left">...</div>
 
         <div class="container__middle">
-
-            <div class="controls">
-                <button id="controls__button">Start</button>
-            </div>
+            <div id="connection"></div>
 
         </div>
 
@@ -156,7 +213,9 @@
             </dl>
             <dl class="options">
                 <dt>Set DTLS role</dt>
-                <dd><input type="text"/></dd>
+                <dd><label>
+                    <input type="text"/>
+                </label></dd>
             </dl>
             <dl class="options">
                 <dt>Use ICE Lite</dt>
@@ -173,8 +232,14 @@
         </div>
     </main>
     <footer>
+        <div class="controls">
+            <button id="controls__button">Start</button>
+        </div>
         <div class="logging">
-            <h3>Log</h3>
+            <div class="logging__header">
+                <h3>Log</h3>
+                <button id="log_clear" class="small">X</button>
+            </div>
             <div id="logMessages"></div>
         </div>
     </footer>
@@ -184,14 +249,14 @@
     const gui = (() => {
         const dest = document.getElementById('logMessages')
 
-        const log = (message, server = true, tag) => {
+        const log = (message, server = true, tag, contentCl) => {
             const el = document.createElement('div')
             el.classList.add('log')
             if (message) {
                 el.innerHTML = `
                         <div class="log__status${server ? ' log__server' : ' log__client'}"></div>
                         ${tag ? `<div class="log__tag">${tag}</div>` : ''}
-                        <div class="log__content">${message}</div>
+                        <div class="log__content${contentCl ? ` ${contentCl}` : ''}">${message}</div>
                         `
             } else {
                 el.classList.add('break')
@@ -201,6 +266,9 @@
 
         return {
             log,
+            clear: () => {
+                dest.innerHTML = ''
+            }
         }
     })()
 
@@ -222,9 +290,12 @@
                 log('socket opened')
                 resolve(e)
             }
-            _socket.onclose = _ => {
-                finish()
-                log('socket closed')
+            _socket.onclose = e => {
+                if (finish) {
+                    finish()
+                    finish = null
+                }
+                log(`socket closed: ${e.code}`)
             }
             _socket.onerror = e => {
                 log(`socket fail${e.message ? `: ${e.message}` : ''}`)
@@ -254,7 +325,7 @@
         let pc
         const log = {
             ice: (m, remote = false) => gui.log(m, remote, 'ICE'),
-            rtc: (m, remote = false) => gui.log(m, remote, 'RTC'),
+            rtc: (m, remote = false, cl) => gui.log(m, remote, 'RTC', cl),
         }
 
         const signal = {
@@ -277,16 +348,64 @@
             // !to add error handler
             pc = new RTCPeerConnection({iceServers: [{urls: 'stun:stun.l.google.com:19302'}]})
 
-            pc.onconnectionstatechange = _ => log.rtc(`→ ${pc.connectionState}`)
+            pc.onconnectionstatechange = async _ => {
+                log.rtc(`→ ${pc.connectionState}`)
+                if (pc.connectionState === 'connected') {
+
+
+                    let local, localId, remote, remoteId;
+                    let stats = await pc.getStats();
+                    for (const value of stats.values()) {
+                        if (value.type === 'candidate-pair') {
+                            if (value.state === 'succeeded') {
+                                remoteId = value.remoteCandidateId
+                                localId = value.localCandidateId
+                                continue
+                            }
+                        }
+                        if (value.type === "local-candidate" || value.type === "remote-candidate")
+                            if (value.id === localId) {
+                                local = value
+                            }
+                        if (value.id === remoteId) {
+                            remote = value
+                        }
+                    }
+                    const dest = document.getElementById('connection')
+
+                    const frag = document.createDocumentFragment()
+                    const text = document.createElement('div')
+                    text.classList.add('connection__pair')
+                    const pair = `[${local.candidateType}] ${local.protocol}://${local.address ? local.address : ''}:${local.port}` +
+                        ` --- [${remote.candidateType}] ${remote.protocol}://${remote.address}:${remote.port}`
+                    text.innerText = pair
+                    log.rtc(`pair [${pair}]`)
+                    frag.append(text)
+                    dest.append(frag)
+                }
+            }
             pc.oniceconnectionstatechange = _ => log.ice(`→ ${pc.iceConnectionState}`)
             pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
+            pc.onsignalingstatechange = _ => gui.log(`→ ${pc.signalingState}`, false, 'sig')
 
-            let dc = pc.createDataChannel('data')
-            dc.onmessage = event => log.rtc(`data chan: ${event.data}`, true)
+            let dc = pc.createDataChannel('data');
+
+            dc.onmessage = e => {
+                log.rtc(e.data.replaceAll('1', String.fromCharCode(9679)).replaceAll('0', String.fromCharCode(9675)))
+            }
 
             pc.onicecandidate = e => {
                 if (!e.candidate) return;
-                log.ice(`local ${e.candidate.candidate}`)
+
+                let addr = e.candidate.address;
+                let cdd = e.candidate.candidate;
+
+                if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2[0-9]|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z0-9.-]+\.local)/.test(addr)) {
+                    cdd = cdd.replace(addr, '¯ \\ _ (ツ) _ / ¯')
+                    // cdd = cdd.replace(addr, addr.replaceAll(/[0-9]/g, String.fromCharCode(9633)))
+                }
+
+                log.ice(`local ${cdd}`)
                 if (e.candidate.candidate === "") {
                 } else {
                     signal.send({t: "ICE", p: e.candidate})
@@ -300,6 +419,8 @@
                         log.rtc(`SDP answer: ${message.p.sdp}`, true)
                         return
                     case "ICE":
+                        // !to handle TypeError
+                        // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
                         pc.addIceCandidate(message.p)
                         log.ice(`remote ${message.p.candidate}`, true)
                         return
@@ -325,7 +446,8 @@
             connect,
             disconnect,
         }
-    })();
+    })
+    ();
 
     (() => {
         const server = webrtc({transport: socket({url: `ws://${window.location.host}/websocket`})});
@@ -343,6 +465,10 @@
                     await server.disconnect()
                     gui.log()
                 }
+            })
+            const logClear = document.getElementById('log_clear');
+            logClear.addEventListener('click', () => {
+                gui.clear()
             })
         })()
     })()
