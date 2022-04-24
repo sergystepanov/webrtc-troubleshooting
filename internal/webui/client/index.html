@@ -276,6 +276,13 @@
         let _socket, finish, handlers = [];
         const log = (m) => gui.log(m, false, 'WS');
 
+        const closeCodes = {
+            1000: 'Normal Closure', 1001: 'Going Away', 1002: 'Protocol error', 1003: 'Unsupported Data',
+            1004: 'Reserved', 1005: 'No Status Rcvd', 1006: 'Abnormal Closure', 1007: 'Invalid frame payload data',
+            1008: 'Policy Violation', 1009: 'Message Too Big', 1010: 'Mandatory Ext.', 1011: 'Internal Error',
+            1012: 'Service Restart', 1013: 'Try Again Later', 1014: 'Bad Gateway', 1015: 'TLS handshake',
+        }
+
         const connect = () => new Promise(function (resolve, reject) {
             log(`connect to ${url}`)
             _socket = new WebSocket(url)
@@ -287,7 +294,7 @@
                 handlers.forEach(h => h(msg))
             }
             _socket.onopen = e => {
-                log('socket opened')
+                log('→ opened')
                 resolve(e)
             }
             _socket.onclose = e => {
@@ -295,10 +302,10 @@
                     finish()
                     finish = null
                 }
-                log(`socket closed: ${e.code}`)
+                log(`→ closed: ${e.code} (${closeCodes[e.code]})`)
             }
             _socket.onerror = e => {
-                log(`socket fail${e.message ? `: ${e.message}` : ''}`)
+                log(`→ fail${e.message ? `: ${e.message}` : ''}`)
                 reject(e)
             }
         })
@@ -307,7 +314,7 @@
             if (!_socket) return;
             finish = resolve
             handlers = []
-            _socket.close()
+            _socket.close(1000)
             _socket = null
         })
 
@@ -351,8 +358,6 @@
             pc.onconnectionstatechange = async _ => {
                 log.rtc(`→ ${pc.connectionState}`)
                 if (pc.connectionState === 'connected') {
-
-
                     let local, localId, remote, remoteId;
                     let stats = await pc.getStats();
                     for (const value of stats.values()) {
@@ -372,7 +377,6 @@
                         }
                     }
                     const dest = document.getElementById('connection')
-
                     const frag = document.createDocumentFragment()
                     const text = document.createElement('div')
                     text.classList.add('connection__pair')

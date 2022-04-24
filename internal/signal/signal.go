@@ -97,6 +97,9 @@ func Signalling() websocket.Handler {
 			var m api.Message
 			err := receive(conn, &m)
 			if errors.Is(err, io.EOF) {
+				if err := conn.WriteClose(1000); err != nil {
+					log.Printf("error: failed signal close, %v", err)
+				}
 				log.Printf("Signal has been closed!")
 				return
 			} else if err != nil {
