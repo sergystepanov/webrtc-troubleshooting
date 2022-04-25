@@ -181,10 +181,20 @@
             background: aliceblue;
         }
 
+        button.toggle.active {
+            color: white;
+            background: #0045a6;
+        }
+
         .logging__header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 18px;
+        }
+
+        .logging__header__controls {
+            display: flex;
+            gap: 6px;
         }
     </style>
 </head>
@@ -238,7 +248,10 @@
         <div class="logging">
             <div class="logging__header">
                 <h3>Log</h3>
-                <button id="log_clear" class="small">X</button>
+                <div class="logging__header__controls">
+                    <button id="log_hide_ip" class="toggle small">Hide public IP</button>
+                    <button id="log_clear" class="small">Clear</button>
+                </div>
             </div>
             <div id="logMessages"></div>
         </div>
@@ -246,7 +259,33 @@
 </div>
 </body>
 <script>
+    const api = (() => {
+
+    })()
+
+    const options = {
+        log: {
+            show_public_ip: true
+        }
+    }
+
     const gui = (() => {
+        const toggles = [...document.getElementsByClassName('toggle')]
+
+        toggles.forEach(e => {
+            e.addEventListener('click', () => {
+                e.classList.toggle('active')
+            })
+        })
+
+        // opts
+        const hideIpOption = document.getElementById('log_hide_ip')
+        if (hideIpOption) {
+            hideIpOption.addEventListener('click', () => {
+                options.log.show_public_ip = !options.log.show_public_ip
+            })
+        }
+
         const dest = document.getElementById('logMessages')
 
         const log = (message, server = true, tag, contentCl) => {
@@ -404,9 +443,10 @@
                 let addr = e.candidate.address;
                 let cdd = e.candidate.candidate;
 
-                if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2[0-9]|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z0-9.-]+\.local)/.test(addr)) {
-                    cdd = cdd.replace(addr, '¯ \\ _ (ツ) _ / ¯')
-                    // cdd = cdd.replace(addr, addr.replaceAll(/[0-9]/g, String.fromCharCode(9633)))
+                if (!options.log.show_public_ip) {
+                    if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2[0-9]|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z0-9.-]+\.local)/.test(addr)) {
+                        cdd = cdd.replace(addr, '¯ \\ _ (ツ) _ / ¯')
+                    }
                 }
 
                 log.ice(`local ${cdd}`)
