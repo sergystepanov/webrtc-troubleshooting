@@ -8,10 +8,12 @@ import (
 )
 
 const (
-	WebrtcIce    MessageType = "ICE"
-	WebrtcOffer  MessageType = "OFFER"
-	WebrtcAnswer MessageType = "ANSWER"
-	MessageLog   MessageType = "LOG"
+	WebrtcIce          MessageType = "ICE"
+	WebrtcOffer        MessageType = "OFFER"
+	WebrtcAnswer       MessageType = "ANSWER"
+	WebrtcWaitingOffer MessageType = "WAITING_OFFER"
+	WebrtcClose        MessageType = "CLOSE"
+	MessageLog         MessageType = "LOG"
 )
 
 type (
@@ -19,9 +21,16 @@ type (
 		typed
 		Payload webrtc.SessionDescription `json:"p"`
 	}
+	Offer struct {
+		typed
+		Payload webrtc.SessionDescription `json:"p"`
+	}
 	ICE struct {
 		typed
 		Payload webrtc.ICECandidateInit `json:"p"`
+	}
+	Close struct {
+		typed
 	}
 	Log struct {
 		Tag  string    `json:"tag"`
@@ -60,6 +69,9 @@ func NewIceCandidateInit(data []byte) (webrtc.ICECandidateInit, error) {
 func NewAnswer(sdp webrtc.SessionDescription) Answer {
 	return Answer{typed: typed{WebrtcAnswer}, Payload: sdp}
 }
+func NewOffer(sdp webrtc.SessionDescription) Offer {
+	return Offer{typed: typed{WebrtcOffer}, Payload: sdp}
+}
 func NewIce(candidate webrtc.ICECandidate) ICE {
 	return ICE{typed: typed{WebrtcIce}, Payload: candidate.ToJSON()}
 }
@@ -73,3 +85,5 @@ func NewLog(l Log) LogMessage {
 		},
 	}
 }
+
+func NewClose() Close { return Close{typed{WebrtcClose}} }

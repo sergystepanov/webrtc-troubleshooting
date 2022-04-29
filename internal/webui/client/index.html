@@ -16,52 +16,27 @@
             max-width: 64rem;
         }
 
-        .container__main {
+        .container__tab.options {
+            overflow-y: auto;
+
+            z-index: 1;
+            /* Background */
+            background-color: #80a7d5;
+            padding: 1em;
+        }
+
+        .container__tab.main {
             flex-grow: 1;
 
             display: flex;
             flex-direction: row;
         }
 
-        .container__left {
-            width: 25%;
-        }
-
-        .container__middle {
-            flex-grow: 1;
-            display: flex;
-            align-items: center;
-            flex-direction: column;
-            /*justify-content: center;*/
-        }
-
-        .container__right {
-            width: 20%;
-        }
-
-        .cards {
-            display: flex;
-
-            flex-wrap: wrap;
-
-            margin-left: -8px;
-            margin-right: -8px;
-        }
-
-        .cards__item {
-            flex-basis: 25%;
-
-            padding-left: 8px;
-            padding-right: 8px;
-        }
-
         @keyframes append-animate {
             from {
-                /*transform: scale(0);*/
                 opacity: 0;
             }
             to {
-                /*transform: scale(1);*/
                 opacity: 1;
             }
         }
@@ -69,7 +44,7 @@
         .log {
             align-items: center;
             display: grid;
-            grid-template-columns: 15px 1fr 28fr;
+            grid-template-columns: 2.1fr .7fr 1fr 30fr;
             animation: append-animate .3s linear;
         }
 
@@ -77,7 +52,7 @@
             font-size: smaller;
         }
 
-        .log__status, .log__tag {
+        .log__status, .log__tag, .log__time, .log__dir {
             align-self: normal;
         }
 
@@ -91,12 +66,23 @@
         }
 
         .log__tag {
-            color: rgba(0, 0, 0, .45);
+
+            /*color: rgba(0, 0, 0, .45);*/
             text-transform: uppercase;
         }
 
-        .log__client {
-            background-color: #e18a42;
+        .log__tag, .log__dir {
+            font-family: monospace;
+            font-size: initial !important;
+            color: rgb(66, 153, 225);
+        }
+
+        .log__client .log__tag {
+            color: #e18a42;
+        }
+
+        .log__client .log__dir {
+            color: white;
         }
 
         .log__content {
@@ -105,6 +91,15 @@
 
         .log.break {
             margin: 0.3em 0;
+        }
+
+        .log__time {
+            /*text-align: end;*/
+            /*padding-right: 8px;*/
+        }
+
+        .grayed {
+            color: rgba(0, 0, 0, .4);
         }
 
         .options {
@@ -122,6 +117,12 @@
             margin: 0;
         }
 
+        .opts__main {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            column-gap: 10px;
+        }
+
         div#inboundDataChannelMessages, div#iceConnectionStates {
             height: 100px;
             overflow: auto;
@@ -130,8 +131,8 @@
 
         .connection__pair {
             display: flex;
-            flex: 10;
             align-items: center;
+            justify-content: center;
         }
 
         .controls {
@@ -139,14 +140,11 @@
             position: sticky;
             top: 0;
             background: white;
-            padding: 1rem;
+            padding-top: 1rem;
             align-items: center;
             justify-content: center;
-        }
 
-        .maze, .maze-odd {
-            position: relative;
-            height: 16px;
+            z-index: 1;
         }
 
         button {
@@ -186,15 +184,29 @@
             background: #0045a6;
         }
 
-        .logging__header {
+        .logging__header, .opts__header {
             display: flex;
             align-items: center;
-            gap: 18px;
+            gap: 10px;
         }
 
-        .logging__header__controls {
+        .logging__header__controls, .opts__header__controls {
             display: flex;
             gap: 6px;
+        }
+
+        .notice {
+            position: relative;
+        }
+
+        .notice:before {
+            position: absolute;
+            background-color: #4299e124;
+            content: '';
+            left: -12px;
+            border-radius: 12px;
+            width: 6px;
+            height: 6px;
         }
     </style>
 </head>
@@ -203,19 +215,22 @@
     <header>
         WebRTC Testing & Troubleshooting Tool
     </header>
-    <main class="container__main">
-        <div class="container__left">...</div>
+    <div id="connection"></div>
 
-        <div class="container__middle">
-            <div id="connection"></div>
-
+    <div class="controls">
+        <button id="controls__button">Start</button>
+    </div>
+    <div class="opts">
+        <div class="opts__header">
+            <h4>Options</h4>
+            <div class="opts__header__controls">
+                <button id="opts_reset" class="small" disabled>Reset</button>
+            </div>
         </div>
-
-        <div class="container__right">
-            <h4>Options </h4>
+        <div class="opts__main">
             <dl class="options">
                 <dt>Flip the offer and the answer sides</dt>
-                <dd><input type="checkbox"/></dd>
+                <dd><input id="opt_flip_offer" type="checkbox"/></dd>
             </dl>
             <dl class="options">
                 <dt>Disable default Interceptors</dt>
@@ -233,29 +248,32 @@
             </dl>
             <dl class="options">
                 <dt>Set a single port</dt>
-                <dd><input type="text"/></dd>
+                <dd><input type="number" min="1" max="65535"/></dd>
             </dl>
             <dl class="options">
                 <dt>Set NAT-IP-MAP</dt>
                 <dd><input type="text"/></dd>
             </dl>
         </div>
-    </main>
-    <footer>
-        <div class="controls">
-            <button id="controls__button">Start</button>
+    </div>
+    <div class="logging">
+        <div class="logging__header">
+            <h3>Log</h3>
+            <div class="logging__header__controls">
+                <button id="log_hide_ip" class="toggle small">Hide public IP</button>
+                <button id="log_clear" class="small">Clear</button>
+            </div>
         </div>
-        <div class="logging">
-            <div class="logging__header">
-                <h3>Log</h3>
-                <div class="logging__header__controls">
-                    <button id="log_hide_ip" class="toggle small">Hide public IP</button>
-                    <button id="log_clear" class="small">Clear</button>
-                </div>
+        <div>
+            <div class="log cap">
+                <div>time</div>
+                <div>dir</div>
+                <div>tag</div>
+                <div>message</div>
             </div>
             <div id="logMessages"></div>
         </div>
-    </footer>
+    </div>
 </div>
 </body>
 <script>
@@ -266,19 +284,28 @@
     const options = {
         log: {
             show_public_ip: true
-        }
+        },
+        webrtc: {
+            ice_servers: [
+                'stun:stun.l.google.com:19302'
+            ],
+            flip_offer_side: false
+        },
     }
+
+    // time-time
+    let startTime, connectTime;
 
     const gui = (() => {
         const toggles = [...document.getElementsByClassName('toggle')]
 
         toggles.forEach(e => {
-            e.addEventListener('click', () => {
-                e.classList.toggle('active')
-            })
+            e.addEventListener('click', () => e.classList.toggle('active'))
         })
 
         // opts
+
+        // log
         const hideIpOption = document.getElementById('log_hide_ip')
         if (hideIpOption) {
             hideIpOption.addEventListener('click', () => {
@@ -286,16 +313,41 @@
             })
         }
 
+        const optFlipOffer = document.getElementById('opt_flip_offer')
+        if (optFlipOffer) {
+            optFlipOffer.addEventListener('change', _ => {
+                options.webrtc.flip_offer_side = optFlipOffer.checked
+            })
+        }
+
         const dest = document.getElementById('logMessages')
 
-        const log = (message, server = true, tag, contentCl) => {
+        const log = (message, server = true, tag, cl) => {
             const el = document.createElement('div')
             el.classList.add('log')
+            if (cl) {
+                el.classList.add(cl)
+            }
+            el.classList.add(server ? 'log__server' : 'log__client')
             if (message) {
+                const curr = performance.now();
+                const diff = curr - startTime;
+                // startTime = curr;
+
+                let time = msToTime(diff)
+                let i = 0
+                while (i < time.length && (time[i] === '0' || time[i] === ':')) {
+                    i++;
+                }
+                if (i > 0) {
+                    time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
+                }
+
                 el.innerHTML = `
-                        <div class="log__status${server ? ' log__server' : ' log__client'}"></div>
+                        <div class="log__time">${time}</div>
+                        <div class="log__dir">${server ? 's' : 'c'}</div>
                         ${tag ? `<div class="log__tag">${tag}</div>` : ''}
-                        <div class="log__content${contentCl ? ` ${contentCl}` : ''}">${message}</div>
+                        <div class="log__content">${message}</div>
                         `
             } else {
                 el.classList.add('break')
@@ -322,9 +374,16 @@
             1012: 'Service Restart', 1013: 'Try Again Later', 1014: 'Bad Gateway', 1015: 'TLS handshake',
         }
 
-        const connect = () => new Promise(function (resolve, reject) {
-            log(`connect to ${url}`)
-            _socket = new WebSocket(url)
+        const connect = (opts) => new Promise(function (resolve, reject) {
+            let params;
+            if (opts) {
+                params = new URLSearchParams(opts).toString()
+            }
+
+            const address = `${url}${params ? `?${params}` : ''}`
+            log(`connect to ${address}`)
+
+            _socket = new WebSocket(address)
             _socket.onmessage = e => {
                 const msg = JSON.parse(e.data)
                 if (!msg) {
@@ -367,6 +426,17 @@
         }
     })();
 
+    function msToTime(duration) {
+        let milliseconds = Math.floor(duration % 1000),
+            seconds = Math.floor((duration / 1000) % 60),
+            minutes = Math.floor((duration / (1000 * 60)) % 60);
+
+        minutes = (minutes < 10) ? "0" + minutes : minutes;
+        seconds = (seconds < 10) ? "0" + seconds : seconds;
+
+        return `${minutes}:${seconds}.${(milliseconds + '').padStart(3, '0')}`;
+    }
+
     const webrtc = ({transport}) => (() => {
         let pc
         const log = {
@@ -376,27 +446,35 @@
 
         const signal = {
             send: (dat) => transport.send(JSON.stringify(dat)),
-            connect: async _ => transport.connect(),
+            connect: async (opts) => transport.connect(opts),
             disconnect: async _ => transport.disconnect(),
             set wire(handler) {
                 transport.onmessage = handler
             }
         }
 
-        const connect = async () => {
+
+        const connect = async ({flip_offer_side = false}) => {
+            connectTime = performance.now();
+            startTime = performance.now();
             log.rtc('Start')
             try {
-                await signal.connect()
+                await signal.connect({flip_offer_side: flip_offer_side})
             } catch (e) {
                 return
             }
 
             // !to add error handler
-            pc = new RTCPeerConnection({iceServers: [{urls: 'stun:stun.l.google.com:19302'}]})
+            pc = new RTCPeerConnection({
+                iceServers: options.webrtc.ice_servers.map(s => ({urls: s}))
+            })
 
             pc.onconnectionstatechange = async _ => {
                 log.rtc(`→ ${pc.connectionState}`)
                 if (pc.connectionState === 'connected') {
+
+                    const elapsed = `${Math.floor(performance.now() - connectTime)} ms`
+
                     let local, localId, remote, remoteId;
                     let stats = await pc.getStats();
                     for (const value of stats.values()) {
@@ -420,9 +498,9 @@
                     const text = document.createElement('div')
                     text.classList.add('connection__pair')
                     const pair = `[${local.candidateType}] ${local.protocol}://${local.address ? local.address : ''}:${local.port}` +
-                        ` --- [${remote.candidateType}] ${remote.protocol}://${remote.address}:${remote.port}`
+                        ` --- [${remote.candidateType}] ${remote.protocol}://${remote.address}:${remote.port} (${elapsed})`
                     text.innerText = pair
-                    log.rtc(`pair [${pair}]`)
+                    log.rtc(`done / ${pair}`, false, 'notice')
                     frag.append(text)
                     dest.append(frag)
                 }
@@ -431,10 +509,21 @@
             pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
             pc.onsignalingstatechange = _ => gui.log(`→ ${pc.signalingState}`, false, 'sig')
 
-            let dc = pc.createDataChannel('data');
+            if (options.webrtc.flip_offer_side) {
+                pc.ondatachannel = e => {
+                    const ch = e.channel
+                    ch.onmessage = e => {
+                        log.rtc(e.data.replaceAll('1', String.fromCharCode(9679)).replaceAll('0', String.fromCharCode(9675)), true)
+                    }
+                    // ch.onopen = myHandleOpen;
+                    // ch.onclose = myHandleClose;
+                }
+            } else {
+                let dc = pc.createDataChannel('data');
 
-            dc.onmessage = e => {
-                log.rtc(e.data.replaceAll('1', String.fromCharCode(9679)).replaceAll('0', String.fromCharCode(9675)))
+                dc.onmessage = e => {
+                    log.rtc(e.data.replaceAll('1', String.fromCharCode(9679)).replaceAll('0', String.fromCharCode(9675)), true)
+                }
             }
 
             pc.onicecandidate = e => {
@@ -456,31 +545,46 @@
                 }
             }
 
-            signal.wire = (message) => {
+            signal.wire = async (message) => {
                 switch (message.t) {
                     case "ANSWER":
-                        pc.setRemoteDescription(message.p)
+                        await pc.setRemoteDescription(message.p)
                         log.rtc(`SDP answer: ${message.p.sdp}`, true)
                         return
                     case "ICE":
                         // !to handle TypeError
                         // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
-                        pc.addIceCandidate(message.p)
+                        pc.addIceCandidate(message.p).catch(e => {
+                            console.log(message, "Failure during addIceCandidate(): " + e.name);
+                        });
                         log.ice(`remote ${message.p.candidate}`, true)
                         return
                     case "LOG":
                         gui.log(message.p.text, true, message.p.tag)
                         return
+                    case "OFFER":
+                        log.rtc(`SDP offer: ${message.p.sdp}`, true)
+                        await pc.setRemoteDescription(message.p)
+                        const answer = await pc.createAnswer()
+                        signal.send({t: "ANSWER", p: answer});
+                        log.rtc(`SDP answer: ${answer.sdp}`)
+                        await pc.setLocalDescription(answer)
+                        return
                 }
             }
 
-            pc.createOffer().then(offer => {
-                pc.setLocalDescription(offer)
-                signal.send({t: "OFFER", p: offer});
-                log.rtc(`SDP offer: ${offer.sdp}`)
-            })
+            if (options.webrtc.flip_offer_side) {
+                signal.send({t: "WAITING_OFFER"})
+            } else {
+                pc.createOffer().then(offer => {
+                    pc.setLocalDescription(offer)
+                    signal.send({t: "OFFER", p: offer});
+                    log.rtc(`SDP offer: ${offer.sdp}`)
+                })
+            }
         }
         const disconnect = async () => {
+            // signal.send({t: "CLOSE"})
             if (!pc) return
             pc.close()
             await signal.disconnect()
@@ -503,7 +607,9 @@
                 active = !active
                 if (active) {
                     control.textContent = 'Stop'
-                    await server.connect()
+                    await server.connect({
+                        flip_offer_side: options.webrtc.flip_offer_side,
+                    })
                 } else {
                     control.textContent = 'Start'
                     await server.disconnect()

@@ -20,15 +20,18 @@ func Signalling() websocket.Handler {
 	return func(conn *websocket.Conn) {
 		messages, done := make(chan api.Log, 100), make(chan struct{})
 
+		q := conn.Request().URL.Query()
+
+		flip := q.Get("flip_offer_side") == "true"
+
 		go func() {
 			for {
 				select {
 				case <-done:
-					log.Printf("SIGNAL STOP!")
 					return
 				case m := <-messages:
-					if err := send(conn, api.NewLog(m)); err == nil {
-						log.Printf("err: %v", err)
+					if err := send(conn, api.NewLog(m)); err != nil {
+						log.Printf("log err: %v", err)
 						return
 					}
 				}
@@ -37,13 +40,46 @@ func Signalling() websocket.Handler {
 
 		_log := func(tag string, format string, v ...any) {
 			m := fmt.Sprintf(format, v...)
-			log.Printf(m)
+			log.Printf("%s %s", tag, m)
 			messages <- api.Log{Tag: tag, Text: m}
 		}
 
-		peer, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+		peer, err := webrtc.NewPeerConnection(webrtc.Configuration{
+			ICEServers: []webrtc.ICEServer{
+				{URLs: []string{"stun:stun.l.google.com:19302"}},
+			},
+		})
 		if err != nil {
 			panic(err)
+		}
+
+		if flip {
+			dc, err := peer.CreateDataChannel("data", nil)
+			if err != nil {
+				panic(err)
+			}
+
+			dc.OnOpen(func() {
+				send := func(message string) {
+					if dc.ReadyState() == webrtc.DataChannelStateOpen {
+						if err = dc.SendText(message); err != nil {
+							panic(err)
+						}
+					}
+				}
+				send(status())
+				ticker := time.NewTicker(10 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-done:
+						_log("sys", "STOP TICKER!")
+						return
+					case _ = <-ticker.C:
+						send(status())
+					}
+				}
+			})
 		}
 
 		peer.OnICECandidate(func(c *webrtc.ICECandidate) {
@@ -88,7 +124,7 @@ func Signalling() websocket.Handler {
 			done <- struct{}{}
 			err := peer.Close()
 			if err != nil {
-				log.Printf("err: %v", err)
+				log.Printf("close err: %v", err)
 				return
 			}
 		}()
@@ -108,6 +144,13 @@ func Signalling() websocket.Handler {
 			}
 
 			switch m.T {
+			case api.WebrtcAnswer:
+				if answer, err := api.NewSessionDescription(m.Payload); err == nil && answer.SDP != "" {
+					if err = peer.SetRemoteDescription(answer.SessionDescription); err != nil {
+						_log("rtc", "err: %v", err)
+						return
+					}
+				}
 			case api.WebrtcOffer:
 				if offer, err := api.NewSessionDescription(m.Payload); err == nil && offer.SDP != "" {
 					if err = peer.SetRemoteDescription(offer.SessionDescription); err != nil {
@@ -135,6 +178,22 @@ func Signalling() websocket.Handler {
 						return
 					}
 				}
+			case api.WebrtcWaitingOffer:
+				offer, err := peer.CreateOffer(nil)
+				if err != nil {
+					_log("rtc", "err: %v", err)
+					return
+				}
+				if err = peer.SetLocalDescription(offer); err != nil {
+					_log("rtc", "err: %v", err)
+					return
+				}
+				if err = send(conn, api.NewOffer(offer)); err != nil {
+					_log("rtc", "err: %v", err)
+					return
+				}
+			case api.WebrtcClose:
+				_log("sig", "!close")
 			default:
 				_log("sys", "err: unknown message [%v]", m.T)
 				return
