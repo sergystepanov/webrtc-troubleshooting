@@ -7,6 +7,11 @@
     <title>WebRTC Testing & Troubleshooting Tool</title>
     <link rel="icon" href="data:,">
     <style>
+        h4 {
+            padding: 0;
+            margin: 0;
+        }
+
         .container {
             display: flex;
             flex-direction: column;
@@ -14,22 +19,8 @@
             margin-left: auto;
             margin-right: auto;
             max-width: 64rem;
-        }
 
-        .container__tab.options {
-            overflow-y: auto;
-
-            z-index: 1;
-            /* Background */
-            background-color: #80a7d5;
-            padding: 1em;
-        }
-
-        .container__tab.main {
-            flex-grow: 1;
-
-            display: flex;
-            flex-direction: row;
+            gap: 20px;
         }
 
         @keyframes append-animate {
@@ -66,15 +57,13 @@
         }
 
         .log__tag {
-
-            /*color: rgba(0, 0, 0, .45);*/
             text-transform: uppercase;
         }
 
         .log__tag, .log__dir {
             font-family: monospace;
             font-size: initial !important;
-            color: rgb(66, 153, 225);
+            color: #4299e1;
         }
 
         .log__client .log__tag {
@@ -94,8 +83,6 @@
         }
 
         .log__time {
-            /*text-align: end;*/
-            /*padding-right: 8px;*/
         }
 
         .grayed {
@@ -123,12 +110,6 @@
             column-gap: 10px;
         }
 
-        div#inboundDataChannelMessages, div#iceConnectionStates {
-            height: 100px;
-            overflow: auto;
-            font-size: 80%;
-        }
-
         .connection__pair {
             display: flex;
             align-items: center;
@@ -140,7 +121,7 @@
             position: sticky;
             top: 0;
             background: white;
-            padding-top: 1rem;
+            padding: 1rem;
             align-items: center;
             justify-content: center;
 
@@ -151,11 +132,8 @@
             color: #0051c3;
             font-size: 13px;
             border-color: #0045a6;
-            -webkit-transition-timing-function: ease;
             transition-timing-function: ease;
-            -webkit-transition-duration: .2s;
             transition-duration: .2s;
-            -webkit-transition-property: background-color, border-color, color;
             transition-property: background-color, border-color, color;
 
             padding: 0.5rem 1rem;
@@ -184,6 +162,10 @@
             background: #0045a6;
         }
 
+        .logging {
+            margin-top: 20px;
+        }
+
         .logging__header, .opts__header {
             display: flex;
             align-items: center;
@@ -208,15 +190,16 @@
             width: 6px;
             height: 6px;
         }
+
+        .opts__header, .logging__header {
+            margin-bottom: .33em;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <header>
-        WebRTC Testing & Troubleshooting Tool
-    </header>
+    <header>WebRTC Testing & Troubleshooting Tool</header>
     <div id="connection"></div>
-
     <div class="controls">
         <button id="controls__button">Start</button>
     </div>
@@ -237,12 +220,6 @@
                 <dd><input type="checkbox"/></dd>
             </dl>
             <dl class="options">
-                <dt>Set DTLS role</dt>
-                <dd><label>
-                    <input type="text"/>
-                </label></dd>
-            </dl>
-            <dl class="options">
                 <dt>Use ICE Lite</dt>
                 <dd><input type="checkbox"/></dd>
             </dl>
@@ -258,8 +235,9 @@
     </div>
     <div class="logging">
         <div class="logging__header">
-            <h3>Log</h3>
+            <h4>Log</h4>
             <div class="logging__header__controls">
+                <button id="log_save" class="small">Save</button>
                 <button id="log_hide_ip" class="toggle small">Hide public IP</button>
                 <button id="log_clear" class="small">Clear</button>
             </div>
@@ -277,9 +255,17 @@
 </div>
 </body>
 <script>
-    const api = (() => {
-
-    })()
+    const api = (wire) => ({
+        send: {
+            webrtc: {
+                answer: (answer) => wire.send({t: "ANSWER", p: answer}),
+                ice: (candidate) => wire.send({t: "ICE", p: candidate}),
+                offer: (offer) => wire.send({t: "OFFER", p: offer}),
+                wait_offer: () => wire.send({t: "WAITING_OFFER"}),
+            }
+        },
+        terminate: () => wire.send({t: "CLOSE"})
+    })
 
     const options = {
         log: {
@@ -330,16 +316,12 @@
             }
             el.classList.add(server ? 'log__server' : 'log__client')
             if (message) {
-                const curr = performance.now();
-                const diff = curr - startTime;
-                // startTime = curr;
-
-                let time = msToTime(diff)
+                let time = formatMs(performance.now() - startTime)
                 let i = 0
                 while (i < time.length && (time[i] === '0' || time[i] === ':')) {
                     i++;
                 }
-                if (i > 0) {
+                if (i) {
                     time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
                 }
 
@@ -354,17 +336,14 @@
             }
             dest.appendChild(el)
         }
-
         return {
             log,
-            clear: () => {
-                dest.innerHTML = ''
-            }
+            clear: () => dest.innerHTML = ''
         }
     })()
 
     const socket = ({url}) => (() => {
-        let _socket, finish, handlers = [];
+        let conn, finish, handlers = [];
         const log = (m) => gui.log(m, false, 'WS');
 
         const closeCodes = {
@@ -383,61 +362,56 @@
             const address = `${url}${params ? `?${params}` : ''}`
             log(`connect to ${address}`)
 
-            _socket = new WebSocket(address)
-            _socket.onmessage = e => {
+            conn = new WebSocket(address)
+            conn.onmessage = e => {
                 const msg = JSON.parse(e.data)
                 if (!msg) {
                     log('error: failed to parse msg')
                 }
                 handlers.forEach(h => h(msg))
             }
-            _socket.onopen = e => {
+            conn.onopen = e => {
                 log('→ opened')
                 resolve(e)
             }
-            _socket.onclose = e => {
+            conn.onclose = e => {
                 if (finish) {
                     finish()
                     finish = null
                 }
                 log(`→ closed: ${e.code} (${closeCodes[e.code]})`)
             }
-            _socket.onerror = e => {
+            conn.onerror = e => {
                 log(`→ fail${e.message ? `: ${e.message}` : ''}`)
                 reject(e)
             }
         })
 
         const disconnect = () => new Promise(function (resolve) {
-            if (!_socket) return;
+            if (!conn) return;
             finish = resolve
             handlers = []
-            _socket.close(1000)
-            _socket = null
+            conn.close(1000)
+            conn = null
         })
 
         return {
             connect,
             disconnect,
-            send: (data) => _socket.send(data),
+            send: (data) => conn.send(data),
             set onmessage(handler) {
                 handlers.push(handler)
             },
         }
     })();
 
-    function msToTime(duration) {
-        let milliseconds = Math.floor(duration % 1000),
-            seconds = Math.floor((duration / 1000) % 60),
-            minutes = Math.floor((duration / (1000 * 60)) % 60);
-
-        minutes = (minutes < 10) ? "0" + minutes : minutes;
-        seconds = (seconds < 10) ? "0" + seconds : seconds;
-
-        return `${minutes}:${seconds}.${(milliseconds + '').padStart(3, '0')}`;
+    function formatMs(ms) {
+        return `${String(Math.floor((ms / (1000 * 60)) % 60)).padStart(2, '0')}:` +
+            `${String(Math.floor((ms / 1000) % 60)).padStart(2, '0')}.` +
+            `${String(Math.floor(ms % 1000)).padStart(3, '0')}`;
     }
 
-    const webrtc = ({transport}) => (() => {
+    const webrtc = ({_api, transport}) => (() => {
         let pc
         const log = {
             ice: (m, remote = false) => gui.log(m, remote, 'ICE'),
@@ -453,6 +427,7 @@
             }
         }
 
+        const api = _api(signal)
 
         const connect = async ({flip_offer_side = false}) => {
             connectTime = performance.now();
@@ -541,7 +516,7 @@
                 log.ice(`local ${cdd}`)
                 if (e.candidate.candidate === "") {
                 } else {
-                    signal.send({t: "ICE", p: e.candidate})
+                    api.send.webrtc.ice(e.candidate)
                 }
             }
 
@@ -566,7 +541,7 @@
                         log.rtc(`SDP offer: ${message.p.sdp}`, true)
                         await pc.setRemoteDescription(message.p)
                         const answer = await pc.createAnswer()
-                        signal.send({t: "ANSWER", p: answer});
+                        api.send.webrtc.answer(answer)
                         log.rtc(`SDP answer: ${answer.sdp}`)
                         await pc.setLocalDescription(answer)
                         return
@@ -574,17 +549,17 @@
             }
 
             if (options.webrtc.flip_offer_side) {
-                signal.send({t: "WAITING_OFFER"})
+                api.send.webrtc.wait_offer()
             } else {
                 pc.createOffer().then(offer => {
                     pc.setLocalDescription(offer)
-                    signal.send({t: "OFFER", p: offer});
+                    api.send.webrtc.offer(offer)
                     log.rtc(`SDP offer: ${offer.sdp}`)
                 })
             }
         }
         const disconnect = async () => {
-            // signal.send({t: "CLOSE"})
+            // api.terminate()
             if (!pc) return
             pc.close()
             await signal.disconnect()
@@ -594,33 +569,60 @@
             connect,
             disconnect,
         }
-    })
-    ();
+    })();
 
     (() => {
-        const server = webrtc({transport: socket({url: `ws://${window.location.host}/websocket`})});
+        const server = webrtc({_api: api, transport: socket({url: `ws://${window.location.host}/websocket`})});
 
-        (() => {
-            const control = document.getElementById('controls__button');
-            let active = false;
-            control.addEventListener('click', async () => {
-                active = !active
-                if (active) {
-                    control.textContent = 'Stop'
-                    await server.connect({
-                        flip_offer_side: options.webrtc.flip_offer_side,
-                    })
-                } else {
-                    control.textContent = 'Start'
-                    await server.disconnect()
-                    gui.log()
+        const downloadToFile = (content, filename, contentType) => {
+            const file = new Blob([content], {type: contentType});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(file);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+
+        const control = document.getElementById('controls__button');
+        let active = false;
+        control.addEventListener('click', async () => {
+            active = !active
+            if (active) {
+                control.textContent = 'Stop'
+                await server.connect({
+                    flip_offer_side: options.webrtc.flip_offer_side,
+                })
+            } else {
+                control.textContent = 'Start'
+                await server.disconnect()
+                gui.log()
+            }
+        })
+        const logClear = document.getElementById('log_clear');
+        logClear.addEventListener('click', () => {
+            gui.clear()
+        })
+        const logSave = document.getElementById('log_save');
+        logSave.addEventListener('click', () => {
+            const txt = document.getElementById('logMessages');
+
+            let text = '';
+            let children = txt.children;
+            for(let i=0; i<children.length; i++){
+                let row = children[i];
+                let children_ = row.children;
+                let line = '';
+                for(let j=0; j<children_.length; j++){
+                    let field = children_[j];
+                    line += field.innerText;
+                    line += ' '
                 }
-            })
-            const logClear = document.getElementById('log_clear');
-            logClear.addEventListener('click', () => {
-                gui.clear()
-            })
-        })()
+                text += line
+                text += '\r\n';
+            }
+
+            downloadToFile(text, 'my-new-file.txt', 'text/plain');
+        })
     })()
 </script>
 </html>
