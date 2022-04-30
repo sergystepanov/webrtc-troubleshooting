@@ -3,6 +3,7 @@ package signal
 import (
 	"errors"
 	"fmt"
+	webrtc2 "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
 	"io"
 	"log"
 	"math/rand"
@@ -38,13 +39,22 @@ func Signalling() websocket.Handler {
 			}
 		}()
 
-		_log := func(tag string, format string, v ...any) {
+		_log := func(tag string, format string, v ...any) string {
 			m := fmt.Sprintf(format, v...)
-			log.Printf("%s %s", tag, m)
+			line := fmt.Sprintf("%s %s", tag, m)
+			log.Printf(line)
 			messages <- api.Log{Tag: tag, Text: m}
+			return line
 		}
 
-		peer, err := webrtc.NewPeerConnection(webrtc.Configuration{
+		s := webrtc.SettingEngine{
+			LoggerFactory: webrtc2.CustomLoggerFactory{
+				Logg: _log,
+			},
+		}
+		apii := webrtc.NewAPI(webrtc.WithSettingEngine(s))
+
+		peer, err := apii.NewPeerConnection(webrtc.Configuration{
 			ICEServers: []webrtc.ICEServer{
 				{URLs: []string{"stun:stun.l.google.com:19302"}},
 			},
