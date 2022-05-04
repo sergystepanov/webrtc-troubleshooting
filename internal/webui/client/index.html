@@ -212,6 +212,10 @@
         </div>
         <div class="opts__main">
             <dl class="options">
+                <dt>Test NAT with STUN</dt>
+                <dd><input id="opt_test_nat" type="checkbox"/></dd>
+            </dl>
+            <dl class="options">
                 <dt>Flip the offer and the answer sides</dt>
                 <dd><input id="opt_flip_offer" type="checkbox"/></dd>
             </dl>
@@ -275,7 +279,8 @@
             ice_servers: [
                 'stun:stun.l.google.com:19302'
             ],
-            flip_offer_side: false
+            flip_offer_side: false,
+            test_nat: false,
         },
     }
 
@@ -303,6 +308,12 @@
         if (optFlipOffer) {
             optFlipOffer.addEventListener('change', _ => {
                 options.webrtc.flip_offer_side = optFlipOffer.checked
+            })
+        }
+        const optTestNat = document.getElementById('opt_test_nat')
+        if (optTestNat) {
+            optTestNat.addEventListener('change', _ => {
+                options.webrtc.test_nat = optTestNat.checked
             })
         }
 
@@ -429,12 +440,16 @@
 
             const api = _api(signal)
 
-            const connect = async ({flip_offer_side = false}) => {
+            const connect = async ({flip_offer_side = false, test_nat = false}) => {
                 connectTime = performance.now();
                 startTime = performance.now();
                 log.rtc('Start')
                 try {
-                    await signal.connect({flip_offer_side: flip_offer_side})
+                    const opts = Object.assign({},
+                        flip_offer_side && {flip_offer_side},
+                        test_nat && {test_nat}
+                    )
+                    await signal.connect(opts)
                 } catch (e) {
                     return
                 }
@@ -615,6 +630,7 @@
                 control.textContent = 'Stop'
                 await server.connect({
                     flip_offer_side: options.webrtc.flip_offer_side,
+                    test_nat: options.webrtc.test_nat,
                 })
             } else {
                 control.textContent = 'Start'

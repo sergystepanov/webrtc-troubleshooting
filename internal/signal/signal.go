@@ -51,12 +51,15 @@ func Signalling() websocket.Handler {
 		q := signal.Request().URL.Query()
 
 		flip := q.Get("flip_offer_side") == "true"
+		testNat := q.Get("test_nat") == "true"
 
 		_log := remoteLogger(&signal)
 
 		logger := pion.CustomLoggerFactory{Log: _log}
 
-		stun.Main(logger.NewLogger("stun"))
+		if testNat {
+			stun.Main(logger.NewLogger("stun"))
+		}
 
 		p2p, err := pion.NewPeerConnection(logger)
 		if err != nil {
