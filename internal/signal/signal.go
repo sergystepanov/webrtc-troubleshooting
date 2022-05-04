@@ -3,6 +3,7 @@ package signal
 import (
 	"errors"
 	"fmt"
+	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/stun"
 	"io"
 	"log"
 	"math/rand"
@@ -28,6 +29,18 @@ func (s *socket) send(m interface{}) error {
 	return websocket.JSON.Send(s.Conn, m)
 }
 
+func remoteLogger(s *socket) func(tag string, format string, v ...any) string {
+	return func(tag string, format string, v ...any) string {
+		m := fmt.Sprintf(format, v...)
+		line := fmt.Sprintf("%s %s", tag, m)
+		log.Printf(line)
+		if err := s.send(api.NewLog(api.Log{Tag: tag, Text: m})); err != nil {
+			log.Printf("log err: %v", err)
+		}
+		return line
+	}
+}
+
 func Signalling() websocket.Handler {
 	status := func() string { return fmt.Sprintf("%08b", rand.Intn(256)) }
 
@@ -39,25 +52,13 @@ func Signalling() websocket.Handler {
 
 		flip := q.Get("flip_offer_side") == "true"
 
-		mes := func(m api.Log) {
-			if err := signal.send(api.NewLog(m)); err != nil {
-				log.Printf("log err: %v", err)
-			}
-		}
+		_log := remoteLogger(&signal)
 
-		_log := func(tag string, format string, v ...any) string {
-			m := fmt.Sprintf(format, v...)
-			line := fmt.Sprintf("%s %s", tag, m)
-			log.Printf(line)
-			mes(api.Log{Tag: tag, Text: m})
-			return line
-		}
+		logger := pion.CustomLoggerFactory{Log: _log}
 
-		s := webrtc.SettingEngine{
-			LoggerFactory: pion.CustomLoggerFactory{
-				Logg: _log,
-			},
-		}
+		stun.Main(logger.NewLogger("stun"))
+
+		s := webrtc.SettingEngine{LoggerFactory: logger}
 		apii := webrtc.NewAPI(webrtc.WithSettingEngine(s))
 
 		peer, err := apii.NewPeerConnection(webrtc.Configuration{
