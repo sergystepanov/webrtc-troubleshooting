@@ -3,13 +3,13 @@ package signal
 import (
 	"errors"
 	"fmt"
-	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/stun"
 	"io"
 	"log"
 	"math/rand"
 	"time"
 
 	"github.com/pion/webrtc/v3"
+	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/stun"
 	pion "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/pkg/api"
 	"golang.org/x/net/websocket"
@@ -58,33 +58,19 @@ func Signalling() websocket.Handler {
 
 		stun.Main(logger.NewLogger("stun"))
 
-		s := webrtc.SettingEngine{LoggerFactory: logger}
-		apii := webrtc.NewAPI(webrtc.WithSettingEngine(s))
-
-		peer, err := apii.NewPeerConnection(webrtc.Configuration{
-			ICEServers: []webrtc.ICEServer{
-				{URLs: []string{"stun:stun.l.google.com:19302"}},
-			},
-		})
+		p2p, err := pion.NewPeerConnection(logger)
 		if err != nil {
 			panic(err)
 		}
 
 		if flip {
-			dc, err := peer.CreateDataChannel("data", nil)
+			dc, err := p2p.CreateDataChannel("data")
 			if err != nil {
 				panic(err)
 			}
 
 			dc.OnOpen(func() {
-				send := func(message string) {
-					if dc.ReadyState() == webrtc.DataChannelStateOpen {
-						if err = dc.SendText(message); err != nil {
-							panic(err)
-						}
-					}
-				}
-				send(status())
+				_ = dc.SendText(status())
 				ticker := time.NewTicker(10 * time.Second)
 				defer ticker.Stop()
 				for {
@@ -93,35 +79,29 @@ func Signalling() websocket.Handler {
 						_log("sys", "STOP TICKER!")
 						return
 					case _ = <-ticker.C:
-						send(status())
+						_ = dc.SendText(status())
 					}
 				}
 			})
 		}
 
-		peer.OnICECandidate(func(c *webrtc.ICECandidate) {
-			if c != nil {
-				if err := signal.send(api.NewIce(*c)); err != nil {
-					panic(err)
-				}
+		p2p.OnIceCandidate(func(c *webrtc.ICECandidate) {
+			if c == nil {
+				return
+			}
+			if err := signal.send(api.NewIce(*c)); err != nil {
+				panic(err)
 			}
 		})
 
-		peer.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) { _log("ice", "→ %s", state) })
-		peer.OnConnectionStateChange(func(state webrtc.PeerConnectionState) { _log("rtc", "→ %s", state) })
-		peer.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) { _log("ice", "→ %s", state) })
-		peer.OnSignalingStateChange(func(state webrtc.SignalingState) { _log("sig", "→ %s", state) })
+		p2p.OnIceConnectionStateChange(func(state webrtc.ICEConnectionState) { _log("ice", "→ %s", state) })
+		p2p.OnConnectionStateChange(func(state webrtc.PeerConnectionState) { _log("rtc", "→ %s", state) })
+		p2p.OnIceGatheringStateChange(func(state webrtc.ICEGathererState) { _log("ice", "→ %s", state) })
+		p2p.OnSignalingStateChange(func(state webrtc.SignalingState) { _log("sig", "→ %s", state) })
 
-		peer.OnDataChannel(func(d *webrtc.DataChannel) {
-			send := func(message string) {
-				if d.ReadyState() == webrtc.DataChannelStateOpen {
-					if err = d.SendText(message); err != nil {
-						panic(err)
-					}
-				}
-			}
+		p2p.OnDataChannel(func(d *pion.DataChannel) {
 			d.OnOpen(func() {
-				send(status())
+				_ = d.SendText(status())
 				ticker := time.NewTicker(10 * time.Second)
 				defer ticker.Stop()
 				for {
@@ -130,7 +110,7 @@ func Signalling() websocket.Handler {
 						_log("sys", "STOP TICKER!")
 						return
 					case _ = <-ticker.C:
-						send(status())
+						_ = d.SendText(status())
 					}
 				}
 			})
@@ -158,57 +138,46 @@ func Signalling() websocket.Handler {
 			}
 
 			switch m.T {
-			case api.WebrtcAnswer:
-				if answer, err := api.NewSessionDescription(m.Payload); err == nil && answer.SDP != "" {
-					if err = peer.SetRemoteDescription(answer.SessionDescription); err != nil {
+			case api.WebrtcAnswer,
+				api.WebrtcOffer:
+				if sdp, err := api.NewSessionDescription(m.Payload); err == nil {
+					if err = p2p.SetRemoteSDP(sdp.SessionDescription); err != nil {
 						_log("rtc", "err: %v", err)
 						return
 					}
 				}
-			case api.WebrtcOffer:
-				if offer, err := api.NewSessionDescription(m.Payload); err == nil && offer.SDP != "" {
-					if err = peer.SetRemoteDescription(offer.SessionDescription); err != nil {
-						_log("rtc", "err: %v", err)
-						return
-					}
+				if m.T == api.WebrtcAnswer {
+					return
 				}
-				answer, err := peer.CreateAnswer(nil)
+				answer, err := p2p.CreateAnswer()
 				if err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
-				if err = peer.SetLocalDescription(answer); err != nil {
-					_log("rtc", "err: %v", err)
-					return
-				}
-				if err = signal.send(api.NewAnswer(answer)); err != nil {
+				if err = signal.send(api.NewAnswer(*answer)); err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
 			case api.WebrtcIce:
-				if candidate, err := api.NewIceCandidateInit(m.Payload); err == nil && candidate.Candidate != "" {
-					if err = peer.AddICECandidate(candidate); err != nil {
+				if candidate, err := api.NewIceCandidateInit(m.Payload); err == nil {
+					if err = p2p.AddIceCandidate(candidate); err != nil {
 						_log("ice", "err: %v", err)
 						return
 					}
 				}
 			case api.WebrtcWaitingOffer:
-				offer, err := peer.CreateOffer(nil)
+				offer, err := p2p.CreateOffer()
 				if err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
-				if err = peer.SetLocalDescription(offer); err != nil {
-					_log("rtc", "err: %v", err)
-					return
-				}
-				if err = signal.send(api.NewOffer(offer)); err != nil {
+				if err = signal.send(api.NewOffer(*offer)); err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
 			case api.WebrtcClose:
 				_log("sig", "!close")
-				err := peer.Close()
+				err := p2p.Close()
 				if err != nil {
 					log.Printf("close err: %v", err)
 				}
