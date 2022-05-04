@@ -3,52 +3,58 @@ package signal
 import (
 	"errors"
 	"fmt"
-	webrtc2 "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
 	"io"
 	"log"
 	"math/rand"
 	"time"
 
 	"github.com/pion/webrtc/v3"
+	pion "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/pkg/api"
 	"golang.org/x/net/websocket"
 )
 
+type socket struct {
+	*websocket.Conn
+	closed bool
+}
+
+func (s *socket) close()                      { s.closed = true }
+func (s *socket) receive(m interface{}) error { return websocket.JSON.Receive(s.Conn, m) }
+func (s *socket) send(m interface{}) error {
+	if s.closed {
+		return nil
+	}
+	return websocket.JSON.Send(s.Conn, m)
+}
+
 func Signalling() websocket.Handler {
-	send, receive := websocket.JSON.Send, websocket.JSON.Receive
 	status := func() string { return fmt.Sprintf("%08b", rand.Intn(256)) }
 
-	return func(conn *websocket.Conn) {
-		messages, done := make(chan api.Log, 100), make(chan struct{})
+	return func(wc *websocket.Conn) {
+		signal := socket{wc, false}
+		done := make(chan struct{})
 
-		q := conn.Request().URL.Query()
+		q := signal.Request().URL.Query()
 
 		flip := q.Get("flip_offer_side") == "true"
 
-		go func() {
-			for {
-				select {
-				case <-done:
-					return
-				case m := <-messages:
-					if err := send(conn, api.NewLog(m)); err != nil {
-						log.Printf("log err: %v", err)
-						return
-					}
-				}
+		mes := func(m api.Log) {
+			if err := signal.send(api.NewLog(m)); err != nil {
+				log.Printf("log err: %v", err)
 			}
-		}()
+		}
 
 		_log := func(tag string, format string, v ...any) string {
 			m := fmt.Sprintf(format, v...)
 			line := fmt.Sprintf("%s %s", tag, m)
 			log.Printf(line)
-			messages <- api.Log{Tag: tag, Text: m}
+			mes(api.Log{Tag: tag, Text: m})
 			return line
 		}
 
 		s := webrtc.SettingEngine{
-			LoggerFactory: webrtc2.CustomLoggerFactory{
+			LoggerFactory: pion.CustomLoggerFactory{
 				Logg: _log,
 			},
 		}
@@ -94,7 +100,7 @@ func Signalling() websocket.Handler {
 
 		peer.OnICECandidate(func(c *webrtc.ICECandidate) {
 			if c != nil {
-				if err := send(conn, api.NewIce(*c)); err != nil {
+				if err := signal.send(api.NewIce(*c)); err != nil {
 					panic(err)
 				}
 			}
@@ -131,19 +137,16 @@ func Signalling() websocket.Handler {
 
 		defer func() {
 			// !to wait for message drain
+
 			done <- struct{}{}
-			err := peer.Close()
-			if err != nil {
-				log.Printf("close err: %v", err)
-				return
-			}
+			signal.close()
 		}()
 
 		for {
 			var m api.Message
-			err := receive(conn, &m)
+			err := signal.receive(&m)
 			if errors.Is(err, io.EOF) {
-				if err := conn.WriteClose(1000); err != nil {
+				if err := signal.WriteClose(1000); err != nil {
 					log.Printf("error: failed signal close, %v", err)
 				}
 				log.Printf("Signal has been closed!")
@@ -177,7 +180,7 @@ func Signalling() websocket.Handler {
 					_log("rtc", "err: %v", err)
 					return
 				}
-				if err = send(conn, api.NewAnswer(answer)); err != nil {
+				if err = signal.send(api.NewAnswer(answer)); err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
@@ -198,12 +201,20 @@ func Signalling() websocket.Handler {
 					_log("rtc", "err: %v", err)
 					return
 				}
-				if err = send(conn, api.NewOffer(offer)); err != nil {
+				if err = signal.send(api.NewOffer(offer)); err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
 			case api.WebrtcClose:
 				_log("sig", "!close")
+				err := peer.Close()
+				if err != nil {
+					log.Printf("close err: %v", err)
+				}
+				if err = signal.send(api.NewClose()); err != nil {
+					_log("sig", "err: %v", err)
+					return
+				}
 			default:
 				_log("sys", "err: unknown message [%v]", m.T)
 				return

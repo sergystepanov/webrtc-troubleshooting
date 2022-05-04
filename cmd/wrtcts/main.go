@@ -19,6 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("web content fail, %v", err)
 	}
+
 	http.Handle("/", index)
 	http.Handle("/websocket", signal.Signalling())
 
