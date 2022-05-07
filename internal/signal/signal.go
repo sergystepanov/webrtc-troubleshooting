@@ -66,6 +66,7 @@ func Signalling() websocket.Handler {
 			panic(err)
 		}
 
+		// todo fix
 		if flip {
 			dc, err := p2p.CreateDataChannel("data")
 			if err != nil {
@@ -150,7 +151,7 @@ func Signalling() websocket.Handler {
 					}
 				}
 				if m.T == api.WebrtcAnswer {
-					return
+					continue
 				}
 				answer, err := p2p.CreateAnswer()
 				if err != nil {
