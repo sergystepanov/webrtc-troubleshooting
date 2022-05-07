@@ -224,10 +224,10 @@
                 <dt>Disable default Interceptors</dt>
                 <dd><input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/></dd>
             </dl>
-            <dl class="options">
-                <dt>Use ICE Lite</dt>
-                <dd><input id="opt-webrtc-ice_lite" type="checkbox" data-default="false"/></dd>
-            </dl>
+<!--            <dl class="options">-->
+<!--                <dt>Use ICE Lite</dt>-->
+<!--                <dd><input id="opt-webrtc-ice_lite" type="checkbox" data-default="false"/></dd>-->
+<!--            </dl>-->
             <dl class="options">
                 <dt>Set a single port</dt>
                 <dd><input id="opt-webrtc-rtc_single_port" type="number" min="1" max="65535" data-default=""/></dd>
@@ -281,6 +281,7 @@
                 'stun:stun.l.google.com:19302'
             ],
             flip_offer_side: false,
+            ice_lite: false,
             test_nat: false,
         },
     }
@@ -471,13 +472,14 @@
 
             const api = _api(signal)
 
-            const connect = async ({flip_offer_side = false, test_nat = false}) => {
+            const connect = async ({flip_offer_side, ice_lite, test_nat}) => {
                 connectTime = performance.now();
                 startTime = performance.now();
                 log.rtc('Start')
                 try {
                     const opts = Object.assign({},
                         flip_offer_side && {flip_offer_side},
+                        ice_lite && {ice_lite},
                         test_nat && {test_nat}
                     )
                     await signal.connect(opts)
@@ -661,6 +663,7 @@
                 control.textContent = 'Stop'
                 await server.connect({
                     flip_offer_side: options.webrtc.flip_offer_side,
+                    ice_lite: options.webrtc.ice_lite,
                     test_nat: options.webrtc.test_nat,
                 })
             } else {

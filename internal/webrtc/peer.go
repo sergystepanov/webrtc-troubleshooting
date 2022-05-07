@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
 )
 
@@ -21,6 +22,7 @@ type (
 		IcePortMin                 int
 		IcePortMax                 int
 		IceServers                 []webrtc.ICEServer
+		Logger                     logging.LoggerFactory
 		SinglePort                 int
 	}
 )
@@ -41,6 +43,9 @@ func DefaultConnection(conf Config) (*Connection, error) {
 	}
 
 	settingEngine := webrtc.SettingEngine{}
+	if conf.Logger != nil {
+		settingEngine = webrtc.SettingEngine{LoggerFactory: conf.Logger}
+	}
 	if conf.DtlsRole > 0 {
 		log.Printf("A custom DTLS role [%v]", conf.DtlsRole)
 		if err := settingEngine.SetAnsweringDTLSRole(webrtc.DTLSRole(conf.DtlsRole)); err != nil {

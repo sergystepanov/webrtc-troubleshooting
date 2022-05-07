@@ -2,6 +2,7 @@ package webrtc
 
 import (
 	"errors"
+
 	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
 )
@@ -24,13 +25,14 @@ func (dc *DataChannel) SendText(text string) error {
 }
 
 func NewPeerConnection(logger logging.LoggerFactory) (*Peer, error) {
-	s := webrtc.SettingEngine{LoggerFactory: logger}
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
-	peer, err := api.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{URLs: []string{"stun:stun.l.google.com:19302"}},
-		},
+	conn, err := DefaultConnection(Config{
+		IceServers: []webrtc.ICEServer{{
+			URLs: []string{"stun:stun.l.google.com:19302"},
+		}},
+		Logger: logger,
 	})
+
+	peer, err := conn.NewConnection()
 	if err != nil {
 		return nil, err
 	}

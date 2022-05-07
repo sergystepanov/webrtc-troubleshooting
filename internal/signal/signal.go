@@ -51,6 +51,7 @@ func Signalling() websocket.Handler {
 		q := signal.Request().URL.Query()
 
 		flip := q.Get("flip_offer_side") == "true"
+		//iceLite := q.Get("ice_lite") == "true"
 		testNat := q.Get("test_nat") == "true"
 
 		_log := remoteLogger(&signal)
@@ -66,7 +67,6 @@ func Signalling() websocket.Handler {
 			panic(err)
 		}
 
-		// todo fix
 		if flip {
 			dc, err := p2p.CreateDataChannel("data")
 			if err != nil {
