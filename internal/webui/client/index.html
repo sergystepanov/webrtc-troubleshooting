@@ -208,33 +208,33 @@
         <div class="opts__header">
             <h4>Options</h4>
             <div class="opts__header__controls">
-                <button id="opts_reset" class="small" disabled>Reset</button>
+                <button id="opts_reset" class="small">Reset</button>
             </div>
         </div>
         <div class="opts__main">
             <dl class="options">
                 <dt>Test NAT with STUN</dt>
-                <dd><input id="opt_test_nat" type="checkbox"/></dd>
+                <dd><input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/></dd>
             </dl>
             <dl class="options">
                 <dt>Flip the offer and the answer sides</dt>
-                <dd><input id="opt_flip_offer" type="checkbox"/></dd>
+                <dd><input id="opt-webrtc-flip_offer_side" type="checkbox" data-default="false"/></dd>
             </dl>
             <dl class="options">
                 <dt>Disable default Interceptors</dt>
-                <dd><input type="checkbox"/></dd>
+                <dd><input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/></dd>
             </dl>
             <dl class="options">
                 <dt>Use ICE Lite</dt>
-                <dd><input type="checkbox"/></dd>
+                <dd><input id="opt-webrtc-ice_lite" type="checkbox" data-default="false"/></dd>
             </dl>
             <dl class="options">
                 <dt>Set a single port</dt>
-                <dd><input type="number" min="1" max="65535"/></dd>
+                <dd><input id="opt-webrtc-rtc_single_port" type="number" min="1" max="65535" data-default=""/></dd>
             </dl>
             <dl class="options">
                 <dt>Set NAT-IP-MAP</dt>
-                <dd><input type="text"/></dd>
+                <dd><input id="opt-webrtc-one_to_one" type="text" data-default=""/></dd>
             </dl>
         </div>
     </div>
@@ -254,7 +254,7 @@
                 <div>tag</div>
                 <div>message</div>
             </div>
-            <div id="logMessages"></div>
+            <div id="log_messages"></div>
         </div>
     </div>
 </div>
@@ -272,7 +272,7 @@
         terminate: () => wire.send({t: "CLOSE"})
     })
 
-    const options = {
+    let options = {
         log: {
             show_public_ip: true
         },
@@ -285,40 +285,70 @@
         },
     }
 
+    const opts = [...document.querySelectorAll('input[id^="opt-"]')]
+    const optsResetEvent = new Event('opts-reset');
+    opts.forEach((opt) => {
+        let val = opt.dataset.default
+
+        // opt-tag-option_name_ -> options = { tag : { option_name: default } }
+        const _id = opt.id.replace('opt-', '').split('-')
+        const tag = _id[0], optName = _id[1];
+
+        switch (opt.type) {
+            case 'checkbox':
+                val = val === 'true'
+                opt.addEventListener('change', _ => options[tag][optName] = opt.checked)
+                opt.addEventListener('opts-reset', _ => {
+                    options[tag][optName] = val
+                    opt.checked = val
+                })
+                break;
+            case 'number':
+            case 'text':
+                opt.addEventListener('input', _ => options[tag][optName] = opt.value)
+                opt.addEventListener('opts-reset', _ => {
+                    options[tag][optName] = val
+                    opt.value = val
+                })
+                break;
+        }
+
+        options[tag][optName] = val
+    })
+
+    // opts
+    const reset = document.getElementById('opts_reset')
+    if (reset) {
+        reset.addEventListener('click', _ => {
+            opts.forEach((opt) => {
+                opt.dispatchEvent(optsResetEvent)
+            })
+        })
+    }
+
     // time-time
     let startTime, connectTime;
 
     const gui = (() => {
+        const forEl = (id, fn) => {
+            const el = document.getElementById(id)
+            if (el) {
+                fn(el)
+            }
+        }
+
         const toggles = [...document.getElementsByClassName('toggle')]
 
-        toggles.forEach(e => {
-            e.addEventListener('click', () => e.classList.toggle('active'))
+        toggles.forEach(el => {
+            el.addEventListener('click', () => el.classList.toggle('active'))
         })
 
-        // opts
-
         // log
-        const hideIpOption = document.getElementById('log_hide_ip')
-        if (hideIpOption) {
-            hideIpOption.addEventListener('click', () => {
-                options.log.show_public_ip = !options.log.show_public_ip
-            })
-        }
+        forEl('log_hide_ip', (el) => {
+            el.addEventListener('click', _ => options.log.show_public_ip = !options.log.show_public_ip)
+        })
 
-        const optFlipOffer = document.getElementById('opt_flip_offer')
-        if (optFlipOffer) {
-            optFlipOffer.addEventListener('change', _ => {
-                options.webrtc.flip_offer_side = optFlipOffer.checked
-            })
-        }
-        const optTestNat = document.getElementById('opt_test_nat')
-        if (optTestNat) {
-            optTestNat.addEventListener('change', _ => {
-                options.webrtc.test_nat = optTestNat.checked
-            })
-        }
-
-        const dest = document.getElementById('logMessages')
+        const dest = document.getElementById('log_messages')
 
         const log = (message, server = true, tag, cl) => {
             const el = document.createElement('div')
@@ -644,7 +674,7 @@
         })
         const logSave = document.getElementById('log_save');
         logSave.addEventListener('click', () => {
-            const txt = document.getElementById('logMessages');
+            const txt = document.getElementById('log_messages');
 
             let text = '';
             let children = txt.children;
