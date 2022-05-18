@@ -3,7 +3,6 @@ package webrtc
 import (
 	"fmt"
 	"github.com/pion/logging"
-	//"github.com/pion/logging"
 )
 
 // customLogger satisfies the interface logging.LeveledLogger
