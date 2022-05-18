@@ -6,8 +6,10 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"strconv"
 	"time"
 
+	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/stun"
 	pion "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
@@ -51,12 +53,21 @@ func Handler() websocket.Handler {
 		q := signal.Request().URL.Query()
 
 		flip := q.Get("flip_offer_side") == "true"
-		//iceLite := q.Get("ice_lite") == "true"
+		logLevel := q.Get("log_level")
 		testNat := q.Get("test_nat") == "true"
 
 		_log := remoteLogger(&signal)
 
-		logger := pion.CustomLoggerFactory{Log: _log}
+		logger := pion.CustomLoggerFactory{
+			Level: logging.LogLevelTrace,
+			Log:   _log,
+		}
+		if logLevel != "" {
+			if l, err := strconv.Atoi(logLevel); err == nil {
+				logger.Level = logging.LogLevel(l)
+			}
+			_log("sys", "log level is %v", logger.Level)
+		}
 
 		if testNat {
 			stun.Main(logger.NewLogger("stun"))

@@ -2,6 +2,7 @@ package webrtc
 
 import (
 	"fmt"
+
 	"github.com/pion/logging"
 )
 
@@ -10,31 +11,47 @@ import (
 // behavior per subsystem (ICE, DTLS, SCTP...)
 type customLogger struct {
 	subsystem string
+	level     logging.LogLevel
 	log       func(tag string, format string, v ...any) string
 }
 
-func (c customLogger) Trace(msg string)                          {}
-func (c customLogger) Tracef(format string, args ...interface{}) {}
-func (c customLogger) Debug(m string)                            { c.Debugf("%s", m) }
-func (c customLogger) Debugf(f string, args ...interface{})      { c.log(c.subsystem, f, args...) }
-func (c customLogger) Info(m string)                             { c.Infof("%s", m) }
-func (c customLogger) Infof(f string, args ...interface{})       { c.log(c.subsystem, f, args...) }
-func (c customLogger) Warn(m string)                             { c.Warnf("%s", m) }
-func (c customLogger) Warnf(f string, args ...interface{})       { c.log(c.subsystem, f, args...) }
-func (c customLogger) Error(m string)                            { c.Errorf("%s", m) }
-func (c customLogger) Errorf(f string, args ...interface{})      { c.log(c.subsystem, f, args...) }
+func (c customLogger) logf(level logging.LogLevel, f string, args ...interface{}) {
+	if c.level.Get() < level {
+		return
+	}
+	c.log(c.subsystem, f, args...)
+}
+
+func (c customLogger) Trace(m string) { c.logf(logging.LogLevelTrace, "%s", m) }
+func (c customLogger) Tracef(f string, args ...interface{}) {
+	c.logf(logging.LogLevelTrace, f, args...)
+}
+func (c customLogger) Debug(m string) { c.logf(logging.LogLevelDebug, "%s", m) }
+func (c customLogger) Debugf(f string, args ...interface{}) {
+	c.logf(logging.LogLevelDebug, f, args...)
+}
+func (c customLogger) Info(m string)                       { c.logf(logging.LogLevelInfo, "%s", m) }
+func (c customLogger) Infof(f string, args ...interface{}) { c.logf(logging.LogLevelInfo, f, args...) }
+func (c customLogger) Warn(m string)                       { c.logf(logging.LogLevelWarn, "%s", m) }
+func (c customLogger) Warnf(f string, args ...interface{}) { c.logf(logging.LogLevelWarn, f, args...) }
+func (c customLogger) Error(m string)                      { c.logf(logging.LogLevelError, "%s", m) }
+func (c customLogger) Errorf(f string, args ...interface{}) {
+	c.logf(logging.LogLevelError, f, args...)
+}
 
 // CustomLoggerFactory satisfies the interface logging.LoggerFactory
 // This allows us to create different loggers per subsystem. So we can
 // add custom behavior
 type CustomLoggerFactory struct {
-	Log func(tag string, format string, v ...any) string
+	Level logging.LogLevel
+	Log   func(tag string, format string, v ...any) string
 }
 
 func (c CustomLoggerFactory) NewLogger(subsystem string) logging.LeveledLogger {
 	fmt.Printf("Creating logger for %s \n", subsystem)
 	return customLogger{
 		subsystem: subsystem,
+		level:     c.Level,
 		log:       c.Log,
 	}
 }
