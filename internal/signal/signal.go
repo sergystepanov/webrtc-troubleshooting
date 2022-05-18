@@ -41,7 +41,7 @@ func remoteLogger(s *socket) func(tag string, format string, v ...any) string {
 	}
 }
 
-func Signalling() websocket.Handler {
+func Handler() websocket.Handler {
 	status := func() string { return fmt.Sprintf("%08b", rand.Intn(256)) }
 
 	return func(wc *websocket.Conn) {

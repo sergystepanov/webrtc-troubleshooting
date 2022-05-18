@@ -21,7 +21,7 @@ func main() {
 	}
 
 	http.Handle("/", index)
-	http.Handle("/websocket", signal.Signalling())
+	http.Handle("/websocket", signal.Handler())
 
 	log.Printf("Listening on %s...", *addr)
 	if err = http.ListenAndServe(*addr, nil); err != nil {

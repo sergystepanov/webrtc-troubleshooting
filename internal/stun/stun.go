@@ -2,38 +2,45 @@ package stun
 
 import (
 	"errors"
-	"flag"
-	"github.com/pion/logging"
-	"github.com/pion/stun"
 	"net"
 	"time"
+
+	"github.com/pion/logging"
+	"github.com/pion/stun"
 )
 
-// This cmd implements RFC5780's tests:
+// This stuff is based on Pion's STUN tester (https://github.com/pion/stun/tree/master/cmd/stun-nat-behaviour),
+// it implements RFC5780's tests:
 // - 4.3.  Determining NAT Mapping Behavior
 // - 4.4.  Determining NAT Filtering Behavior
 
-type stunServerConn struct {
-	conn        net.PacketConn
-	LocalAddr   net.Addr
-	RemoteAddr  *net.UDPAddr
-	OtherAddr   *net.UDPAddr
-	messageChan chan *stun.Message
-}
+type (
+	stunServerConn struct {
+		conn        net.PacketConn
+		LocalAddr   net.Addr
+		RemoteAddr  *net.UDPAddr
+		OtherAddr   *net.UDPAddr
+		messageChan chan *stun.Message
+	}
+	stunData struct {
+		xorAddr    *stun.XORMappedAddress
+		otherAddr  *stun.OtherAddress
+		respOrigin *stun.ResponseOrigin
+		mappedAddr *stun.MappedAddress
+		software   *stun.Software
+	}
+)
 
 func (c *stunServerConn) Close() error {
 	return c.conn.Close()
 }
 
-var (
-	addrStrPtr = flag.String("server", "stun.nextcloud.com:443", "STUN server address")             // nolint:gochecknoglobals
-	timeoutPtr = flag.Int("timeout", 3, "the number of seconds to wait for STUN server's response") // nolint:gochecknoglobals
-	verbose    = flag.Int("verbose", 1, "the verbosity level")                                      // nolint:gochecknoglobals
-	log        logging.LeveledLogger                                                                // nolint:gochecknoglobals
-)
+var log logging.LeveledLogger
 
 const (
-	messageHeaderSize = 20
+	stunAddr = "stun.nextcloud.com:443"
+	// the number of seconds to wait for STUN server's response
+	timeout = 3 * time.Second
 )
 
 var (
@@ -43,26 +50,12 @@ var (
 )
 
 func Main(l logging.LeveledLogger) {
-	//flag.Parse()
-	//
-	//var logLevel logging.LogLevel
-	//switch *verbose {
-	//case 0:
-	//	logLevel = logging.LogLevelWarn
-	//case 1:
-	//	logLevel = logging.LogLevelInfo // default
-	//case 2:
-	//	logLevel = logging.LogLevelDebug
-	//case 3:
-	//	logLevel = logging.LogLevelTrace
-	//}
 	log = l
 	//logging.NewDefaultLeveledLoggerForScope("", logging.LogLevelDebug, os.Stdout)
-
-	if err := mappingTests(*addrStrPtr); err != nil {
+	if err := mappingTests(stunAddr); err != nil {
 		log.Warn("NAT mapping behavior: inconclusive")
 	}
-	if err := filteringTests(*addrStrPtr); err != nil {
+	if err := filteringTests(stunAddr); err != nil {
 		log.Warn("NAT filtering behavior: inconclusive")
 	}
 }
@@ -85,38 +78,38 @@ func mappingTests(addrStr string) error {
 	}
 
 	// Parse response message for XOR-MAPPED-ADDRESS and make sure OTHER-ADDRESS valid
-	resps1 := parse(resp)
-	if resps1.xorAddr == nil || resps1.otherAddr == nil {
+	stun1 := parse(resp)
+	if stun1.xorAddr == nil || stun1.otherAddr == nil {
 		log.Info("Error: NAT discovery feature not supported by this server")
 		return errNoOtherAddress
 	}
-	addr, err := net.ResolveUDPAddr("udp4", resps1.otherAddr.String())
+	addr, err := net.ResolveUDPAddr("udp4", stun1.otherAddr.String())
 	if err != nil {
-		log.Infof("Failed resolving OTHER-ADDRESS: %v\n", resps1.otherAddr)
+		log.Infof("Failed resolving OTHER-ADDRESS: %v\n", stun1.otherAddr)
 		return err
 	}
 	mapTestConn.OtherAddr = addr
-	log.Infof("Received XOR-MAPPED-ADDRESS: %v\n", resps1.xorAddr)
+	log.Infof("Received XOR-MAPPED-ADDRESS: %v\n", stun1.xorAddr)
 
 	// Assert mapping behavior
-	if resps1.xorAddr.String() == mapTestConn.LocalAddr.String() {
+	if stun1.xorAddr.String() == mapTestConn.LocalAddr.String() {
 		log.Warn("=> NAT mapping behavior: endpoint independent (no NAT)")
 		return nil
 	}
 
 	// Test II: Send binding request to the other address but primary port
 	log.Info("Mapping Test II: Send binding request to the other address but primary port")
-	oaddr := *mapTestConn.OtherAddr
-	oaddr.Port = mapTestConn.RemoteAddr.Port
-	resp, err = mapTestConn.roundTrip(request, &oaddr)
+	otherAddr := *mapTestConn.OtherAddr
+	otherAddr.Port = mapTestConn.RemoteAddr.Port
+	resp, err = mapTestConn.roundTrip(request, &otherAddr)
 	if err != nil {
 		return err
 	}
 
 	// Assert mapping behavior
-	resps2 := parse(resp)
-	log.Infof("Received XOR-MAPPED-ADDRESS: %v\n", resps2.xorAddr)
-	if resps2.xorAddr.String() == resps1.xorAddr.String() {
+	stun2 := parse(resp)
+	log.Infof("Received XOR-MAPPED-ADDRESS: %v\n", stun2.xorAddr)
+	if stun2.xorAddr.String() == stun1.xorAddr.String() {
 		log.Warn("=> NAT mapping behavior: endpoint independent")
 		return nil
 	}
@@ -129,9 +122,9 @@ func mappingTests(addrStr string) error {
 	}
 
 	// Assert mapping behavior
-	resps3 := parse(resp)
-	log.Infof("Received XOR-MAPPED-ADDRESS: %v\n", resps3.xorAddr)
-	if resps3.xorAddr.String() == resps2.xorAddr.String() {
+	stun3 := parse(resp)
+	log.Infof("Received XOR-MAPPED-ADDRESS: %v\n", stun3.xorAddr)
+	if stun3.xorAddr.String() == stun2.xorAddr.String() {
 		log.Warn("=> NAT mapping behavior: address dependent")
 	} else {
 		log.Warn("=> NAT mapping behavior: address and port dependent")
@@ -156,14 +149,14 @@ func filteringTests(addrStr string) error {
 	if err != nil || errors.Is(err, errTimedOut) {
 		return err
 	}
-	resps := parse(resp)
-	if resps.xorAddr == nil || resps.otherAddr == nil {
+	stun0 := parse(resp)
+	if stun0.xorAddr == nil || stun0.otherAddr == nil {
 		log.Warn("Error: NAT discovery feature not supported by this server")
 		return errNoOtherAddress
 	}
-	addr, err := net.ResolveUDPAddr("udp4", resps.otherAddr.String())
+	addr, err := net.ResolveUDPAddr("udp4", stun0.otherAddr.String())
 	if err != nil {
-		log.Infof("Failed resolving OTHER-ADDRESS: %v\n", resps.otherAddr)
+		log.Infof("Failed resolving OTHER-ADDRESS: %v\n", stun0.otherAddr)
 		return err
 	}
 	mapTestConn.OtherAddr = addr
@@ -199,14 +192,7 @@ func filteringTests(addrStr string) error {
 }
 
 // Parse a STUN message
-func parse(msg *stun.Message) (ret struct {
-	xorAddr    *stun.XORMappedAddress
-	otherAddr  *stun.OtherAddress
-	respOrigin *stun.ResponseOrigin
-	mappedAddr *stun.MappedAddress
-	software   *stun.Software
-},
-) {
+func parse(msg *stun.Message) (ret stunData) {
 	ret.mappedAddr = &stun.MappedAddress{}
 	ret.xorAddr = &stun.XORMappedAddress{}
 	ret.respOrigin = &stun.ResponseOrigin{}
@@ -227,12 +213,14 @@ func parse(msg *stun.Message) (ret struct {
 	if ret.software.GetFrom(msg) != nil {
 		ret.software = nil
 	}
-	log.Debugf("%v\n", msg)
-	log.Debugf("\tMAPPED-ADDRESS:     %v\n", ret.mappedAddr)
-	log.Debugf("\tXOR-MAPPED-ADDRESS: %v\n", ret.xorAddr)
-	log.Debugf("\tRESPONSE-ORIGIN:    %v\n", ret.respOrigin)
-	log.Debugf("\tOTHER-ADDRESS:      %v\n", ret.otherAddr)
-	log.Debugf("\tSOFTWARE: %v\n", ret.software)
+	log.Debugf(
+		"%v\n"+
+			"\tMAPPED-ADDRESS:     %v\n"+
+			"\tXOR-MAPPED-ADDRESS: %v\n"+
+			"\tRESPONSE-ORIGIN:    %v\n"+
+			"\tOTHER-ADDRESS:      %v\n"+
+			"\tSOFTWARE:           %v\n",
+		msg, ret.mappedAddr, ret.xorAddr, ret.respOrigin, ret.otherAddr, ret.software)
 	for _, attr := range msg.Attributes {
 		switch attr.Type {
 		case
@@ -241,7 +229,7 @@ func parse(msg *stun.Message) (ret struct {
 			stun.AttrResponseOrigin,
 			stun.AttrMappedAddress,
 			stun.AttrSoftware:
-			break //nolint: staticcheck
+			break
 		default:
 			log.Debugf("\t%v (l=%v)\n", attr, attr.Length)
 		}
@@ -278,7 +266,7 @@ func connect(addrStr string) (*stunServerConn, error) {
 // Send request and wait for response or timeout
 func (c *stunServerConn) roundTrip(msg *stun.Message, addr net.Addr) (*stun.Message, error) {
 	_ = msg.NewTransactionID()
-	log.Infof("Sending to %v: (%v bytes)\n", addr, msg.Length+messageHeaderSize)
+	log.Infof("Sending to %v: (%v bytes)\n", addr, msg.Length+20)
 	log.Debugf("%v\n", msg)
 	for _, attr := range msg.Attributes {
 		log.Debugf("\t%v (l=%v)\n", attr, attr.Length)
@@ -296,38 +284,32 @@ func (c *stunServerConn) roundTrip(msg *stun.Message, addr net.Addr) (*stun.Mess
 			return nil, errResponseMessage
 		}
 		return m, nil
-	case <-time.After(time.Duration(*timeoutPtr) * time.Second):
+	case <-time.After(timeout):
 		log.Infof("Timed out waiting for response from server %v\n", addr)
 		return nil, errTimedOut
 	}
 }
 
-// taken from https://github.com/pion/stun/blob/master/cmd/stun-traversal/main.go
-func listen(conn *net.UDPConn) (messages chan *stun.Message) {
-	messages = make(chan *stun.Message)
+func listen(conn *net.UDPConn) chan *stun.Message {
+	mess := make(chan *stun.Message)
 	go func() {
+		defer close(mess)
 		for {
 			buf := make([]byte, 1024)
-
 			n, addr, err := conn.ReadFromUDP(buf)
 			if err != nil {
-				close(messages)
 				return
 			}
 			log.Infof("Response from %v: (%v bytes)\n", addr, n)
 			buf = buf[:n]
-
 			m := new(stun.Message)
 			m.Raw = buf
-			err = m.Decode()
-			if err != nil {
+			if err = m.Decode(); err != nil {
 				log.Infof("Error decoding message: %v\n", err)
-				close(messages)
 				return
 			}
-
-			messages <- m
+			mess <- m
 		}
 	}()
-	return
+	return mess
 }
