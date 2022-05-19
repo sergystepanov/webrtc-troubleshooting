@@ -213,6 +213,13 @@
         </div>
         <div class="opts__main">
             <dl class="options">
+                <dt>STUN/TURN servers</dt>
+                <dd>
+                    <textarea id="opt-webrtc-ice_servers" cols="26" rows="3"
+                              data-default="stun:stun.nextcloud.com:443,stun:stun.l.google.com:19302">stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302</textarea>
+                </dd>
+            </dl>
+            <dl class="options">
                 <dt>Test NAT with STUN</dt>
                 <dd><input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/></dd>
             </dl>
@@ -288,6 +295,7 @@
         },
         webrtc: {
             ice_servers: [
+                'stun:stun.nextcloud.com:443',
                 'stun:stun.l.google.com:19302'
             ],
             flip_offer_side: false,
@@ -297,7 +305,7 @@
         },
     }
 
-    const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"]')]
+    const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
     const optsResetEvent = new Event('opts-reset');
 
     opts.forEach((opt) => {
@@ -309,10 +317,7 @@
         const tag = _id[0], optName = _id[1];
 
         switch (opt.tagName.toLowerCase()) {
-            case 'select':
-                listener = 'change'
-                valueHolder = 'value'
-                break;
+
             case 'input':
                 switch (opt.type) {
                     case 'checkbox':
@@ -326,6 +331,16 @@
                         valueHolder = 'value'
                         break;
                 }
+                break;
+            case 'select':
+                listener = 'change'
+                valueHolder = 'value'
+                break;
+            case 'textarea':
+                val = (val || '').split(',')
+                listener = 'change'
+                valueHolder = 'value'
+                break;
         }
 
         if (listener && valueHolder) {
@@ -334,8 +349,8 @@
                 options[tag][optName] = val
                 opt[valueHolder] = val
             })
+            options[tag][optName] = val
         }
-        options[tag][optName] = val
     })
 
     // opts
@@ -493,7 +508,7 @@
 
             const api = _api(signal)
 
-            const connect = async ({flip_offer_side, ice_lite, log_level, test_nat}) => {
+            const connect = async ({flip_offer_side, ice_lite, ice_servers, log_level, test_nat}) => {
                 connectTime = performance.now();
                 startTime = performance.now();
                 log.rtc('Start')
@@ -501,6 +516,7 @@
                     const opts = Object.assign({},
                         flip_offer_side && {flip_offer_side},
                         ice_lite && {ice_lite},
+                        ice_servers && {ice_servers},
                         log_level && {log_level},
                         test_nat && {test_nat}
                     )
@@ -509,9 +525,10 @@
                     return
                 }
 
+                const servs = (options.webrtc.ice_servers || []).map(s => ({urls: s}))
                 // !to add error handler
                 pc = new RTCPeerConnection({
-                    iceServers: options.webrtc.ice_servers.map(s => ({urls: s}))
+                    iceServers: servs
                 })
 
                 pc.onconnectionstatechange = async _ => {
@@ -686,6 +703,7 @@
                 await server.connect({
                     flip_offer_side: options.webrtc.flip_offer_side,
                     ice_lite: options.webrtc.ice_lite,
+                    ice_servers: options.webrtc.ice_servers,
                     log_level: options.webrtc.log_level,
                     test_nat: options.webrtc.test_nat,
                 })

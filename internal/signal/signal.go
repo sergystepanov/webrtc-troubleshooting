@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pion/logging"
@@ -55,6 +56,7 @@ func Handler() websocket.Handler {
 		flip := q.Get("flip_offer_side") == "true"
 		logLevel := q.Get("log_level")
 		testNat := q.Get("test_nat") == "true"
+		iceServers := q.Get("ice_servers")
 
 		_log := remoteLogger(&signal)
 
@@ -73,7 +75,7 @@ func Handler() websocket.Handler {
 			stun.Main(logger.NewLogger("stun"))
 		}
 
-		p2p, err := pion.NewPeerConnection(logger)
+		p2p, err := pion.NewPeerConnection(strings.Split(iceServers, ","), logger)
 		if err != nil {
 			panic(err)
 		}

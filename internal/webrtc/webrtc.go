@@ -24,13 +24,21 @@ func (dc *DataChannel) SendText(text string) error {
 	return dc.ch.SendText(text)
 }
 
-func NewPeerConnection(logger logging.LoggerFactory) (*Peer, error) {
-	conn, err := DefaultConnection(Config{
-		IceServers: []webrtc.ICEServer{{
-			URLs: []string{"stun:stun.l.google.com:19302"},
-		}},
+func NewPeerConnection(iceServers []string, logger logging.LoggerFactory) (*Peer, error) {
+	conf := Config{
 		Logger: logger,
-	})
+	}
+	if len(iceServers) > 0 {
+		var servs []webrtc.ICEServer
+		for _, s := range iceServers {
+			if s == "" {
+				continue
+			}
+			servs = append(servs, webrtc.ICEServer{URLs: []string{s}})
+		}
+		conf.IceServers = servs
+	}
+	conn, err := DefaultConnection(conf)
 
 	peer, err := conn.NewConnection()
 	if err != nil {
