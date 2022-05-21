@@ -29,14 +29,14 @@ func NewPeerConnection(iceServers []string, logger logging.LoggerFactory) (*Peer
 		Logger: logger,
 	}
 	if len(iceServers) > 0 {
-		var servs []webrtc.ICEServer
+		var ices []webrtc.ICEServer
 		for _, s := range iceServers {
 			if s == "" {
 				continue
 			}
-			servs = append(servs, webrtc.ICEServer{URLs: []string{s}})
+			ices = append(ices, webrtc.ICEServer{URLs: []string{s}})
 		}
-		conf.IceServers = servs
+		conf.IceServers = ices
 	}
 	conn, err := DefaultConnection(conf)
 
