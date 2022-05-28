@@ -289,7 +289,7 @@
     </div>
 </div>
 </body>
-<script>
+<script async>
     const api = (wire) => ({
         send: {
             webrtc: {
@@ -400,6 +400,11 @@
 
         const dest = document.getElementById('log_messages')
 
+        const fmt_t = (ms) => {
+            const pad = (n, z = 2) => ('00' + Math.floor(n)).slice(-z);
+            return `${pad(ms / 60000 % 60)}:${pad(ms / 1000 % 60)}.${pad(ms % 1000, 3)}`;
+        }
+
         const log = (message, server = true, tag, cl) => {
             const el = document.createElement('div')
             el.classList.add('log')
@@ -408,7 +413,7 @@
             }
             el.classList.add(server ? 'log__server' : 'log__client')
             if (message) {
-                let time = formatMs(performance.now() - startTime)
+                let time = fmt_t(performance.now() - startTime)
                 let i = 0
                 while (i < time.length && (time[i] === '0' || time[i] === ':')) {
                     i++;
@@ -497,12 +502,6 @@
             },
         }
     })();
-
-    function formatMs(ms) {
-        return `${String(Math.floor((ms / (1000 * 60)) % 60)).padStart(2, '0')}:` +
-            `${String(Math.floor((ms / 1000) % 60)).padStart(2, '0')}.` +
-            `${String(Math.floor(ms % 1000)).padStart(3, '0')}`;
-    }
 
     const webrtc = ({_api, transport}) => (() => {
             let pc, dc;
