@@ -101,8 +101,12 @@
             padding: 8px 0;
         }
 
-        .options dd {
+        .options div {
             margin: 0;
+        }
+
+        .options__description {
+            font-size: 80%;
         }
 
         .opts__main {
@@ -212,30 +216,30 @@
             </div>
         </div>
         <div class="opts__main">
-            <dl class="options">
-                <dt>STUN/TURN servers</dt>
-                <dd>
+            <div class="options">
+                <label>STUN/TURN servers
                     <textarea id="opt-webrtc-ice_servers" cols="26" rows="3"
                               data-default="stun:stun.nextcloud.com:443,stun:stun.l.google.com:19302">stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302</textarea>
-                </dd>
-            </dl>
-            <dl class="options">
-                <dt>Test NAT with STUN</dt>
-                <dd><input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/></dd>
-            </dl>
-            <dl class="options">
-                <dt>Flip the offer and the answer sides</dt>
-                <dd><input id="opt-webrtc-flip_offer_side" type="checkbox" data-default="false"/></dd>
-            </dl>
-            <dl class="options">
-                <dt>Disable default Interceptors</dt>
-                <dd><input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/></dd>
-            </dl>
-            <dl class="options">
-                <dt>Logging level</dt>
-                <dd>
-                    <label for="opt-webrtc-log_level"></label>
-                    <select name="pets" id="opt-webrtc-log_level" data-default="4">
+                </label>
+            </div>
+            <div class="options">
+                <label>Determine NAT type
+                    <input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/>
+                </label>
+            </div>
+            <div class="options">
+                <label>Flip the offer and the answer sides
+                    <input id="opt-webrtc-flip_offer_side" type="checkbox" data-default="false"/>
+                </label>
+            </div>
+            <div class="options">
+                <label>Disable default Interceptors
+                    <input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/>
+                </label>
+            </div>
+            <div class="options">
+                <label>Logging level (server)
+                    <select id="opt-webrtc-log_level" data-default="4">
                         <option value="0">Disabled</option>
                         <option value="1">Error</option>
                         <option value="2">Warning</option>
@@ -243,16 +247,29 @@
                         <option value="4" selected>Debug</option>
                         <option value="5">Trace</option>
                     </select>
-                </dd>
-            </dl>
-            <dl class="options">
-                <dt>Set a single port</dt>
-                <dd><input id="opt-webrtc-rtc_single_port" type="number" min="1" max="65535" data-default=""/></dd>
-            </dl>
-            <dl class="options">
-                <dt>Set NAT-IP-MAP</dt>
-                <dd><input id="opt-webrtc-one_to_one" type="text" data-default=""/></dd>
-            </dl>
+                </label>
+            </div>
+            <div class="options">
+                <label>Use a single port
+                    <input id="opt-webrtc-rtc_single_port" type="number" min="1" max="65535" data-default=""/>
+                </label>
+                <div class="options__description">
+                    This options restricts WebRTC connections to use just one predefined port instead of
+                    usage of a random range of <a href="https://en.wikipedia.org/wiki/Ephemeral_port#Range"
+                                                  target="_blank">ephemeral</a> ports
+                </div>
+            </div>
+            <div class="options">
+                <label>Use 1:1 NAT mapping
+                    <input id="opt-webrtc-one_to_one" type="text" data-default=""/>
+                    <div class="options__description">
+                        1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
+                        traffic originating from that private IPv4 address
+                        going to the Internet will be mapped by 1:1 NAT to the public IPv4 address defined in the entry,
+                        overriding the Outbound NAT configuration.
+                    </div>
+                </label>
+            </div>
         </div>
     </div>
     <div class="logging">
