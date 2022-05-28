@@ -247,7 +247,7 @@
             </div>
             <div class="options">
                 <label>Use a single port
-                    <input id="opt-webrtc-rtc_single_port" type="number" min="1" max="65535" data-default=""/>
+                    <input id="opt-webrtc-port" type="number" min="1" max="65535" data-default=""/>
                 </label>
                 <div class="options__description">
                     This options restricts WebRTC connections to use just one predefined port instead of
@@ -318,6 +318,7 @@
             ice_lite: false,
             log_level: 4,
             test_nat: false,
+            port: undefined,
         },
     }
 
@@ -511,7 +512,12 @@
 
         const api = _api(signal)
 
-        const connect = async ({flip_offer_side, ice_lite, ice_servers, log_level, test_nat}) => {
+        const connectionInfo = (conn) => {
+            const {address, port, protocol, candidateType} = conn
+            return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
+        }
+
+        const connect = async ({flip_offer_side, ice_lite, ice_servers, log_level, test_nat, port}) => {
             connectTime = startTime = performance.now();
             log.rtc('Start')
             try {
@@ -520,7 +526,8 @@
                     ice_lite && {ice_lite},
                     ice_servers && {ice_servers},
                     log_level && {log_level},
-                    test_nat && {test_nat}
+                    test_nat && {test_nat},
+                    port && {port},
                 )
                 await signal.connect(opts)
             } catch (e) {
@@ -531,18 +538,11 @@
             // !to add error handler
             pc = new RTCPeerConnection({iceServers: ices})
 
-            const connectionInfo = (conn) => {
-                const {address, port, protocol, candidateType} = conn
-                return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
-            }
-
             pc.onconnectionstatechange = async _ => {
                 log.rtc(`→ ${pc.connectionState}`)
                 if (pc.connectionState !== 'connected') {
                     return
                 }
-
-                const elapsed = `${Math.floor(performance.now() - connectTime)} ms`
 
                 let local, localId, remote, remoteId, progress = false;
                 let stats = await pc.getStats();
@@ -582,8 +582,9 @@
                     text.innerText = `no pair );`
                     log.rtc(`no pair!`)
                 } else {
-                    const pair = `${progress ? '[in-progress] ' : ''}` +
-                        `${connectionInfo(local)} --- ${connectionInfo(remote)} (${elapsed})`
+                    const elapsed = Math.floor(performance.now() - connectTime)
+                    const pair = (progress ? '[in-progress] ' : '') +
+                        `${connectionInfo(local)} --- ${connectionInfo(remote)} (${elapsed} ms)`
                     text.innerText = pair
                     log.rtc(`done / ${pair}`, LOG_LOCAL, 'notice')
                 }
@@ -613,17 +614,14 @@
             pc.onicecandidate = e => {
                 if (!e.candidate) return;
 
-                let addr = e.candidate.address;
-                let cdd = e.candidate.candidate;
-
+                let {address, candidate} = e.candidate
                 if (!options.log.show_public_ip) {
-                    if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2\d|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z\d.-]+\.local)/.test(addr)) {
-                        cdd = cdd.replace(addr, '¯ \\ _ (ツ) _ / ¯')
+                    if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2\d|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z\d.-]+\.local)/.test(address)) {
+                        candidate = candidate.replace(address, '¯ \\ _ (ツ) _ / ¯')
                     }
                 }
-
-                log.ice(`local ${cdd}`)
-                if (e.candidate.candidate !== "") {
+                log.ice(`local ${candidate}`)
+                if (candidate !== "") {
                     api.send.webrtc.ice(e.candidate)
                 }
             }
@@ -637,9 +635,8 @@
                     case "ICE":
                         // !to handle TypeError
                         // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
-                        pc.addIceCandidate(message.p).catch(e => {
-                            console.log(message, "Failure during addIceCandidate(): " + e.name);
-                        });
+                        pc.addIceCandidate(message.p)
+                            .catch(e => log.ice(`Failure during addIceCandidate(): ${e.name}`))
                         log.ice(`remote ${message.p.candidate}`, LOG_REMOTE)
                         return
                     case "LOG":
@@ -709,6 +706,7 @@
                     ice_servers: options.webrtc.ice_servers,
                     log_level: options.webrtc.log_level,
                     test_nat: options.webrtc.test_nat,
+                    port: options.webrtc.port,
                 })
             } else {
                 control.textContent = 'Start'

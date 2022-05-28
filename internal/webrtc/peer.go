@@ -11,8 +11,11 @@ import (
 
 type (
 	Connection struct {
-		api    *webrtc.API
-		config *webrtc.Configuration
+		*webrtc.PeerConnection
+
+		api      *webrtc.API
+		config   *webrtc.Configuration
+		listener *net.UDPConn
 	}
 	Config struct {
 		DisableDefaultInterceptors bool
@@ -42,6 +45,8 @@ func DefaultConnection(conf Config) (*Connection, error) {
 		}
 	}
 
+	var udpConn *net.UDPConn
+
 	settingEngine := webrtc.SettingEngine{}
 	if conf.Logger != nil {
 		settingEngine = webrtc.SettingEngine{LoggerFactory: conf.Logger}
@@ -61,13 +66,11 @@ func DefaultConnection(conf Config) (*Connection, error) {
 		}
 	} else {
 		if conf.SinglePort > 0 {
-			udpListener, err := net.ListenUDP("udp", &net.UDPAddr{
-				IP:   net.IP{0, 0, 0, 0},
-				Port: conf.SinglePort,
-			})
+			udpListener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: conf.SinglePort})
 			if err != nil {
 				panic(err)
 			}
+			udpConn = udpListener
 			log.Printf("Listening for WebRTC traffic at %s", udpListener.LocalAddr())
 			settingEngine.SetICEUDPMux(webrtc.NewICEUDPMux(nil, udpListener))
 		}
@@ -88,11 +91,28 @@ func DefaultConnection(conf Config) (*Connection, error) {
 			webrtc.WithInterceptorRegistry(i),
 			webrtc.WithSettingEngine(settings),
 		),
-		config: &peerConf,
+		config:   &peerConf,
+		listener: udpConn,
 	}
 	return &conn, nil
 }
 
-func (p *Connection) NewConnection() (*webrtc.PeerConnection, error) {
-	return p.api.NewPeerConnection(*p.config)
+func (p *Connection) Connect() error {
+	pc, err := p.api.NewPeerConnection(*p.config)
+	if err != nil {
+		return err
+	}
+	p.PeerConnection = pc
+	return nil
+}
+
+func (p *Connection) Close() error {
+	var err error
+	if p.listener != nil {
+		err = p.listener.Close()
+	}
+	if p.PeerConnection != nil {
+		err = p.PeerConnection.Close()
+	}
+	return err
 }

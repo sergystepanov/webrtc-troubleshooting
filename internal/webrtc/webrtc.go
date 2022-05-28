@@ -2,6 +2,7 @@ package webrtc
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
@@ -12,7 +13,7 @@ type (
 		ch *webrtc.DataChannel
 	}
 	Peer struct {
-		conn *webrtc.PeerConnection
+		conn *Connection
 	}
 )
 
@@ -24,7 +25,7 @@ func (dc *DataChannel) SendText(text string) error {
 	return dc.ch.SendText(text)
 }
 
-func NewPeerConnection(iceServers []string, logger logging.LoggerFactory) (*Peer, error) {
+func NewPeerConnection(iceServers []string, port string, logger logging.LoggerFactory) (*Peer, error) {
 	conf := Config{
 		Logger: logger,
 	}
@@ -38,13 +39,19 @@ func NewPeerConnection(iceServers []string, logger logging.LoggerFactory) (*Peer
 		}
 		conf.IceServers = ices
 	}
+	if port != "" {
+		if p, err := strconv.Atoi(port); err == nil {
+			conf.SinglePort = p
+		}
+	}
 	conn, err := DefaultConnection(conf)
-
-	peer, err := conn.NewConnection()
 	if err != nil {
 		return nil, err
 	}
-	return &Peer{peer}, nil
+	if err = conn.Connect(); err != nil {
+		return nil, err
+	}
+	return &Peer{conn}, nil
 }
 
 func (p *Peer) CreateDataChannel(name string) (*DataChannel, error) {
@@ -105,7 +112,9 @@ func (p *Peer) AddIceCandidate(candidate webrtc.ICECandidateInit) error {
 	return p.conn.AddICECandidate(candidate)
 }
 
-func (p *Peer) Close() error { return p.conn.Close() }
+func (p *Peer) Close() error {
+	return p.conn.Close()
+}
 
 func (p *Peer) SetRemoteSDP(session webrtc.SessionDescription) error {
 	if session.SDP == "" {
