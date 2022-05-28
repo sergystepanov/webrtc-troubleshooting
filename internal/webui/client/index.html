@@ -280,14 +280,17 @@
     const api = (wire) => ({
         send: {
             webrtc: {
-                answer: (answer) => wire.send({t: "ANSWER", p: answer}),
-                ice: (candidate) => wire.send({t: "ICE", p: candidate}),
-                offer: (offer) => wire.send({t: "OFFER", p: offer}),
-                wait_offer: () => wire.send({t: "WAITING_OFFER"}),
+                answer: (answer) => void wire.send({t: "ANSWER", p: answer}),
+                ice: (candidate) => void wire.send({t: "ICE", p: candidate}),
+                offer: (offer) => void wire.send({t: "OFFER", p: offer}),
+                wait_offer: () => void wire.send({t: "WAITING_OFFER"}),
             }
         },
-        terminate: () => wire.send({t: "CLOSE"})
+        terminate: () => void wire.send({t: "CLOSE"})
     })
+
+    const LOG_LOCAL = false,
+        LOG_REMOTE = true;
 
     let options = {
         log: {
@@ -317,7 +320,6 @@
         const tag = _id[0], optName = _id[1];
 
         switch (opt.tagName.toLowerCase()) {
-
             case 'input':
                 switch (opt.type) {
                     case 'checkbox':
@@ -374,9 +376,7 @@
             }
         }
 
-        const toggles = [...document.getElementsByClassName('toggle')]
-
-        toggles.forEach(el => {
+        [...document.getElementsByClassName('toggle')].forEach(el => {
             el.addEventListener('click', () => el.classList.toggle('active'))
         })
 
@@ -417,13 +417,13 @@
         }
         return {
             log,
-            clear: () => dest.innerHTML = ''
+            clear: () => void (dest.innerHTML = '')
         }
     })()
 
     const socket = ({url}) => (() => {
         let conn, finish, handlers = [];
-        const log = (m) => gui.log(m, false, 'WS');
+        const log = (m) => void gui.log(m, LOG_LOCAL, 'WS');
 
         const closeCodes = {
             1000: 'Normal Closure', 1001: 'Going Away', 1002: 'Protocol error', 1003: 'Unsupported Data',
@@ -493,8 +493,8 @@
     const webrtc = ({_api, transport}) => (() => {
             let pc, dc;
             const log = {
-                ice: (m, remote = false) => gui.log(m, remote, 'ICE'),
-                rtc: (m, remote = false, cl) => gui.log(m, remote, 'RTC', cl),
+                ice: (m, remote = LOG_LOCAL) => gui.log(m, remote, 'ICE'),
+                rtc: (m, remote = LOG_LOCAL, cl) => gui.log(m, remote, 'RTC', cl),
             }
 
             const signal = {
@@ -509,8 +509,7 @@
             const api = _api(signal)
 
             const connect = async ({flip_offer_side, ice_lite, ice_servers, log_level, test_nat}) => {
-                connectTime = performance.now();
-                startTime = performance.now();
+                connectTime = startTime = performance.now();
                 log.rtc('Start')
                 try {
                     const opts = Object.assign({},
@@ -525,82 +524,84 @@
                     return
                 }
 
-                const servs = (options.webrtc.ice_servers || []).map(s => ({urls: s}))
+                const ices = (options.webrtc.ice_servers || []).map(s => ({urls: s}))
                 // !to add error handler
-                pc = new RTCPeerConnection({
-                    iceServers: servs
-                })
+                pc = new RTCPeerConnection({iceServers: ices})
 
                 pc.onconnectionstatechange = async _ => {
                     log.rtc(`→ ${pc.connectionState}`)
-                    if (pc.connectionState === 'connected') {
-                        const elapsed = `${Math.floor(performance.now() - connectTime)} ms`
+                    if (pc.connectionState !== 'connected') {
+                        return
+                    }
 
-                        let local, localId, remote, remoteId, progress = false;
-                        let stats = await pc.getStats();
-                        for (const value of stats.values()) {
-                            switch (value.type) {
-                                case 'candidate-pair':
-                                    switch (value.state) {
-                                        case 'succeeded':
+                    const elapsed = `${Math.floor(performance.now() - connectTime)} ms`
+
+                    let local, localId, remote, remoteId, progress = false;
+                    let stats = await pc.getStats();
+                    for (const value of stats.values()) {
+                        switch (value.type) {
+                            case 'candidate-pair':
+                                switch (value.state) {
+                                    case 'succeeded':
+                                        remoteId = value.remoteCandidateId
+                                        localId = value.localCandidateId
+                                        console.info(value)
+                                        break;
+                                    case 'in-progress':
+                                        if (value.nominated) {
+                                            progress = true
                                             remoteId = value.remoteCandidateId
                                             localId = value.localCandidateId
-                                            break;
-                                        case 'in-progress':
-                                            if (value.nominated) {
-                                                progress = true
-                                                remoteId = value.remoteCandidateId
-                                                localId = value.localCandidateId
-                                            }
-                                            break;
-                                    }
-                                    break;
-                                case 'local-candidate':
-                                case 'remote-candidate':
-                                    if (localId && value.id === localId) {
-                                        local = value
-                                    }
-                                    if (remoteId && value.id === remoteId) {
-                                        remote = value
-                                    }
-                                    break;
-                            }
+                                            console.info(value)
+                                        }
+                                        break;
+                                }
+                                break;
+                            case 'local-candidate':
+                            case 'remote-candidate':
+                                if (localId && value.id === localId) {
+                                    local = value
+                                }
+                                if (remoteId && value.id === remoteId) {
+                                    remote = value
+                                }
+                                break;
                         }
-                        const dest = document.getElementById('connection')
-                        const frag = document.createDocumentFragment()
-                        const text = document.createElement('div')
-                        text.classList.add('connection__pair')
-                        if (!local || !remote) {
-                            text.innerText = `no pair );`
-                            log.rtc(`no pair!`, false)
-                        } else {
-                            const pair = `${progress ? '[in-progress]' : ''}[${local.candidateType}] ${local.protocol}://${local.address ? local.address : ''}:${local.port}` +
-                                ` --- [${remote.candidateType}] ${remote.protocol}://${remote.address}:${remote.port} (${elapsed})`
-                            text.innerText = pair
-                            log.rtc(`done / ${pair}`, false, 'notice')
-                        }
-                        frag.append(text)
-                        dest.append(frag)
                     }
+                    const dest = document.getElementById('connection')
+                    const frag = document.createDocumentFragment()
+                    const text = document.createElement('div')
+                    text.classList.add('connection__pair')
+                    if (!local || !remote) {
+                        text.innerText = `no pair );`
+                        log.rtc(`no pair!`)
+                    } else {
+                        const pair = `${progress ? '[in-progress]' : ''}[${local.candidateType}] ${local.protocol}://${local.address ? local.address : ''}:${local.port}` +
+                            ` --- [${remote.candidateType}] ${remote.protocol}://${remote.address}:${remote.port} (${elapsed})`
+                        text.innerText = pair
+                        log.rtc(`done / ${pair}`, LOG_LOCAL, 'notice')
+                    }
+                    frag.append(text)
+                    dest.append(frag)
                 }
                 pc.oniceconnectionstatechange = _ => log.ice(`→ ${pc.iceConnectionState}`)
                 pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
-                pc.onsignalingstatechange = _ => gui.log(`→ ${pc.signalingState}`, false, 'sig')
+                pc.onsignalingstatechange = _ => gui.log(`→ ${pc.signalingState}`, LOG_LOCAL, 'sig')
+
+                const bin = (e) => log.rtc(e.data
+                    .replaceAll('1', String.fromCharCode(9679))
+                    .replaceAll('0', String.fromCharCode(9675)), LOG_REMOTE)
 
                 if (options.webrtc.flip_offer_side) {
                     pc.ondatachannel = e => {
                         dc = e.channel
-                        dc.onmessage = e => {
-                            log.rtc(e.data.replaceAll('1', String.fromCharCode(9679)).replaceAll('0', String.fromCharCode(9675)), true)
-                        }
+                        dc.onmessage = bin
                         // ch.onopen = myHandleOpen;
                         // ch.onclose = myHandleClose;
                     }
                 } else {
                     dc = pc.createDataChannel('data');
-                    dc.onmessage = e => {
-                        log.rtc(e.data.replaceAll('1', String.fromCharCode(9679)).replaceAll('0', String.fromCharCode(9675)), true)
-                    }
+                    dc.onmessage = bin
                 }
 
                 pc.onicecandidate = e => {
@@ -610,14 +611,13 @@
                     let cdd = e.candidate.candidate;
 
                     if (!options.log.show_public_ip) {
-                        if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2[0-9]|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z0-9.-]+\.local)/.test(addr)) {
+                        if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2\d|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z\d.-]+\.local)/.test(addr)) {
                             cdd = cdd.replace(addr, '¯ \\ _ (ツ) _ / ¯')
                         }
                     }
 
                     log.ice(`local ${cdd}`)
-                    if (e.candidate.candidate === "") {
-                    } else {
+                    if (e.candidate.candidate !== "") {
                         api.send.webrtc.ice(e.candidate)
                     }
                 }
@@ -626,7 +626,7 @@
                     switch (message.t) {
                         case "ANSWER":
                             await pc.setRemoteDescription(message.p)
-                            log.rtc(`SDP answer: ${message.p.sdp}`, true)
+                            log.rtc(`SDP answer: ${message.p.sdp}`, LOG_REMOTE)
                             return
                         case "ICE":
                             // !to handle TypeError
@@ -634,13 +634,13 @@
                             pc.addIceCandidate(message.p).catch(e => {
                                 console.log(message, "Failure during addIceCandidate(): " + e.name);
                             });
-                            log.ice(`remote ${message.p.candidate}`, true)
+                            log.ice(`remote ${message.p.candidate}`, LOG_REMOTE)
                             return
                         case "LOG":
-                            gui.log(message.p.text, true, message.p.tag)
+                            gui.log(message.p.text, LOG_REMOTE, message.p.tag)
                             return
                         case "OFFER":
-                            log.rtc(`SDP offer: ${message.p.sdp}`, true)
+                            log.rtc(`SDP offer: ${message.p.sdp}`, LOG_REMOTE)
                             await pc.setRemoteDescription(message.p)
                             const answer = await pc.createAnswer()
                             api.send.webrtc.answer(answer)
@@ -678,11 +678,9 @@
                 disconnect,
             }
         }
-    )
-    ();
+    )();
 
     (() => {
-
         const downloadToFile = (content, filename, contentType) => {
             const file = new Blob([content], {type: contentType});
             const a = document.createElement('a');
@@ -712,31 +710,29 @@
                 await server.disconnect()
             }
         })
-        const logClear = document.getElementById('log_clear');
-        logClear.addEventListener('click', () => {
-            gui.clear()
-        })
-        const logSave = document.getElementById('log_save');
-        logSave.addEventListener('click', () => {
-            const txt = document.getElementById('log_messages');
 
-            let text = '';
-            let children = txt.children;
-            for (let i = 0; i < children.length; i++) {
-                let row = children[i];
-                let children_ = row.children;
-                let line = '';
-                for (let j = 0; j < children_.length; j++) {
-                    let field = children_[j];
-                    line += field.innerText;
-                    line += ' '
+        document.getElementById('log_clear')
+            .addEventListener('click', gui.clear)
+
+        document.getElementById('log_save')
+            .addEventListener('click', () => {
+                const txt = document.getElementById('log_messages');
+                let text = '';
+                let children = txt.children;
+                for (let i = 0; i < children.length; i++) {
+                    let row = children[i];
+                    let children_ = row.children;
+                    let line = '';
+                    for (let j = 0; j < children_.length; j++) {
+                        let field = children_[j];
+                        line += field.innerText;
+                        line += ' '
+                    }
+                    text += line
+                    text += '\r\n';
                 }
-                text += line
-                text += '\r\n';
-            }
-
-            downloadToFile(text, 'my-new-file.txt', 'text/plain');
-        })
+                downloadToFile(text, 'my-new-file.txt', 'text/plain');
+            })
     })()
 </script>
 </html>
