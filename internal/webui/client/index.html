@@ -258,13 +258,13 @@
             <div class="options">
                 <label>Use 1:1 NAT mapping
                     <input id="opt-webrtc-one_to_one" type="text" data-default=""/>
-                    <div class="options__description">
-                        1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
-                        traffic originating from that private IPv4 address
-                        going to the Internet will be mapped by 1:1 NAT to the public IPv4 address defined in the entry,
-                        overriding the Outbound NAT configuration.
-                    </div>
                 </label>
+                <div class="options__description">
+                    1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
+                    traffic originating from that private IPv4 address
+                    going to the Internet will be mapped by 1:1 NAT to the public IPv4 address defined in the entry,
+                    overriding the Outbound NAT configuration.
+                </div>
             </div>
         </div>
     </div>
@@ -487,6 +487,7 @@
             conn = null
         })
 
+        // noinspection JSUnusedGlobalSymbols
         return {
             connect,
             disconnect,
@@ -541,6 +542,11 @@
                 // !to add error handler
                 pc = new RTCPeerConnection({iceServers: ices})
 
+                const connectionInfo = (conn) => {
+                    const {address, port, protocol, candidateType} = conn
+                    return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
+                }
+
                 pc.onconnectionstatechange = async _ => {
                     log.rtc(`→ ${pc.connectionState}`)
                     if (pc.connectionState !== 'connected') {
@@ -589,8 +595,8 @@
                         text.innerText = `no pair );`
                         log.rtc(`no pair!`)
                     } else {
-                        const pair = `${progress ? '[in-progress]' : ''}[${local.candidateType}] ${local.protocol}://${local.address ? local.address : ''}:${local.port}` +
-                            ` --- [${remote.candidateType}] ${remote.protocol}://${remote.address}:${remote.port} (${elapsed})`
+                        const pair = `${progress ? '[in-progress] ' : ''}` +
+                            `${connectionInfo(local)} --- ${connectionInfo(remote)} (${elapsed})`
                         text.innerText = pair
                         log.rtc(`done / ${pair}`, LOG_LOCAL, 'notice')
                     }
