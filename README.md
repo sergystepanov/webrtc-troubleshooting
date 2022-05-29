@@ -1,4 +1,4 @@
-# webrtc-troubleshooting
+# w3t (webrtc-troubleshooting)
 
 A simple tool for troubleshooting WebRTC issues.
 
@@ -6,7 +6,7 @@ This utility contains a web server application designed for convenient debugging
 
 ### Use
 
-Just run the wrtcts executable. Open the main page in the browser (i.e. localhost:3000).
+Just run the w3t executable. Open the main page in the browser (i.e. localhost:3000).
 
 Config params:
 
@@ -20,5 +20,5 @@ Config params:
 Install Golang. Run:
 
 ```
-go build ./cmd/wrtcts
+go build ./cmd/w3t
 ```

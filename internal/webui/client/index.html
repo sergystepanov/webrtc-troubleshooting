@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>WebRTC Testing & Troubleshooting Tool</title>
+    <link rel="icon" href="data:,">
+    <style>
+        h4 {
+            padding: 0;
+            margin: 0;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+
+            margin-left: auto;
+            margin-right: auto;
+            max-width: 64rem;
+
+            gap: 20px;
+        }
+
+        @keyframes append-animate {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .log {
+            align-items: center;
+            display: grid;
+            grid-template-columns: 1.5fr .4fr .8fr 20fr;
+            animation: append-animate .3s linear;
+        }
+
+        .log div {
+            font-size: smaller;
+        }
+
+        .log__tag, .log__time, .log__dir {
+            align-self: normal;
+        }
+
+        .log__tag {
+            text-transform: uppercase;
+        }
+
+        .log__tag, .log__dir {
+            font-family: monospace;
+            font-size: initial !important;
+            color: #4299e1;
+        }
+
+        .log__client .log__tag {
+            color: #e18a42;
+        }
+
+        .log__client .log__dir {
+            color: white;
+        }
+
+        .log__content {
+            flex: 1;
+            white-space: break-spaces;
+        }
+
+        /*noinspection CssUnusedSymbol*/
+        .log.break {
+            margin: 0.3em 0;
+        }
+
+        .log__time {
+        }
+
+        .grayed {
+            color: rgba(0, 0, 0, .4);
+        }
+
+        .options {
+            align-items: center;
+            display: flex;
+
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+
+            margin: 0;
+            padding: 8px 0;
+        }
+
+        .options div {
+            margin: 0;
+        }
+
+        .options__description {
+            font-size: 80%;
+        }
+
+        .opts__main {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            column-gap: 10px;
+        }
+
+        /*noinspection CssUnusedSymbol*/
+        .connection__pair {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .controls {
+            display: flex;
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 1rem;
+            align-items: center;
+            justify-content: center;
+
+            z-index: 1;
+        }
+
+        button {
+            color: #0051c3;
+            font-size: 13px;
+            border-color: #0045a6;
+            transition-timing-function: ease;
+            transition-duration: .2s;
+            transition-property: background-color, border-color, color;
+
+            padding: 0.5rem 1rem;
+
+            cursor: pointer;
+
+            border-width: 1px;
+            border-style: solid;
+            border-radius: 0.25rem;
+
+            --bg-opacity: 1;
+            background-color: #fff;
+            background-color: rgba(255, 255, 255, var(--bg-opacity));
+        }
+
+        button.small {
+            font-size: 10px;
+
+            padding: .2rem .5rem;
+            border: none;
+            background: aliceblue;
+        }
+
+        /*noinspection CssUnusedSymbol*/
+        button.toggle.active {
+            color: white;
+            background: #0045a6;
+        }
+
+        .logging {
+            margin-top: 20px;
+        }
+
+        .logging__header, .opts__header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logging__header__controls, .opts__header__controls {
+            display: flex;
+            gap: 6px;
+        }
+
+        /*noinspection CssUnusedSymbol*/
+        .notice {
+            position: relative;
+        }
+
+        /*noinspection CssUnusedSymbol*/
+        .notice:before {
+            position: absolute;
+            background-color: #4299e124;
+            content: '';
+            left: -12px;
+            border-radius: 12px;
+            width: 6px;
+            height: 6px;
+        }
+
+        .opts__header, .logging__header {
+            margin-bottom: .33em;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>WebRTC Testing & Troubleshooting Tool</header>
+    <div id="connection"></div>
+    <div class="controls">
+        <button id="controls__button">Start</button>
+    </div>
+    <div class="opts">
+        <div class="opts__header">
+            <h4>Options</h4>
+            <div class="opts__header__controls">
+                <button id="opts_reset" class="small">Reset</button>
+            </div>
+        </div>
+        <div class="opts__main">
+            <div class="options">
+                <label>STUN/TURN servers
+                    <textarea id="opt-webrtc-ice_servers" cols="26" rows="3"
+                              data-default="stun:stun.nextcloud.com:443,stun:stun.l.google.com:19302">stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302</textarea>
+                </label>
+            </div>
+            <div class="options">
+                <label>Determine NAT type
+                    <input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/>
+                </label>
+            </div>
+            <div class="options">
+                <label>Flip the offer and the answer sides
+                    <input id="opt-webrtc-flip_offer_side" type="checkbox" data-default="false"/>
+                </label>
+            </div>
+            <div class="options">
+                <label>Disable default Interceptors
+                    <input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/>
+                </label>
+            </div>
+            <div class="options">
+                <label>Logging level (server)
+                    <select id="opt-webrtc-log_level" data-default="4">
+                        <option value="0">Disabled</option>
+                        <option value="1">Error</option>
+                        <option value="2">Warning</option>
+                        <option value="3">Info</option>
+                        <option value="4" selected>Debug</option>
+                        <option value="5">Trace</option>
+                    </select>
+                </label>
+            </div>
+            <div class="options">
+                <label>Use a single port
+                    <input id="opt-webrtc-port" type="number" min="1" max="65535" data-default=""/>
+                </label>
+                <div class="options__description">
+                    This options restricts WebRTC connections to use just one predefined port instead of
+                    usage of a random range of <a href="https://en.wikipedia.org/wiki/Ephemeral_port#Range"
+                                                  target="_blank">ephemeral</a> ports
+                </div>
+            </div>
+            <div class="options">
+                <label>Use 1:1 NAT mapping
+                    <input id="opt-webrtc-one_to_one" type="text" data-default=""/>
+                </label>
+                <div class="options__description">
+                    1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
+                    traffic originating from that private IPv4 address
+                    going to the Internet will be mapped by 1:1 NAT to the public IPv4 address defined in the entry,
+                    overriding the Outbound NAT configuration.
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="logging">
+        <div class="logging__header">
+            <h4>Log</h4>
+            <div class="logging__header__controls">
+                <button id="log_save" class="small">Save</button>
+                <button id="log_hide_ip" class="toggle small">Hide public IP</button>
+                <button id="log_clear" class="small">Clear</button>
+            </div>
+        </div>
+        <div>
+            <div class="log cap">
+                <div>time</div>
+                <div>dir</div>
+                <div>tag</div>
+                <div>message</div>
+            </div>
+            <div id="log_messages"></div>
+        </div>
+    </div>
+</div>
+</body>
+<script async>
+    const api = (wire) => ({
+        send: {
+            webrtc: {
+                answer: (answer) => void wire.send({t: "ANSWER", p: answer}),
+                ice: (candidate) => void wire.send({t: "ICE", p: candidate}),
+                offer: (offer) => void wire.send({t: "OFFER", p: offer}),
+                wait_offer: () => void wire.send({t: "WAITING_OFFER"}),
+            }
+        },
+        terminate: () => void wire.send({t: "CLOSE"})
+    })
+
+    const LOG_LOCAL = false,
+        LOG_REMOTE = true;
+
+    let options = {
+        log: {
+            show_public_ip: true
+        },
+        webrtc: {
+            ice_servers: [
+                'stun:stun.nextcloud.com:443',
+                'stun:stun.l.google.com:19302'
+            ],
+            flip_offer_side: false,
+            ice_lite: false,
+            log_level: 4,
+            test_nat: false,
+            port: undefined,
+        },
+    }
+
+    const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
+    const optsResetEvent = new Event('opts-reset');
+
+    opts.forEach((opt) => {
+        let listener, valueHolder;
+        let val = opt.dataset.default
+
+        // opt-tag-option_name_ -> options = { tag : { option_name: default } }
+        const _id = opt.id.replace('opt-', '').split('-')
+        const tag = _id[0], optName = _id[1];
+
+        switch (opt.tagName.toLowerCase()) {
+            case 'input':
+                switch (opt.type) {
+                    case 'checkbox':
+                        val = val === 'true'
+                        listener = 'change'
+                        valueHolder = 'checked'
+                        break;
+                    case 'number':
+                    case 'text':
+                        listener = 'input'
+                        valueHolder = 'value'
+                        break;
+                }
+                break;
+            case 'select':
+                listener = 'change'
+                valueHolder = 'value'
+                break;
+            case 'textarea':
+                val = (val || '').split(',')
+                listener = 'change'
+                valueHolder = 'value'
+                break;
+        }
+
+        if (listener && valueHolder) {
+            opt.addEventListener(listener, _ => options[tag][optName] = opt[valueHolder])
+            opt.addEventListener('opts-reset', _ => {
+                options[tag][optName] = val
+                opt[valueHolder] = val
+            })
+            options[tag][optName] = val
+        }
+    })
+
+    // opts
+    document.getElementById('opts_reset')
+        .addEventListener('click', _ => void opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
+
+    // time-time
+    let startTime, connectTime;
+
+    const gui = (() => {
+        const forEl = (id, fn) => {
+            const el = document.getElementById(id)
+            if (el) {
+                fn(el)
+            }
+        }
+
+        [...document.getElementsByClassName('toggle')].forEach(el => {
+            el.addEventListener('click', () => el.classList.toggle('active'))
+        })
+
+        // log
+        forEl('log_hide_ip', (el) => {
+            el.addEventListener('click', _ => options.log.show_public_ip = !options.log.show_public_ip)
+        })
+
+        const dest = document.getElementById('log_messages')
+
+        const fmt_t = (ms) => {
+            const pad = (n, z = 2) => ('00' + Math.floor(n)).slice(-z);
+            return `${pad(ms / 60000 % 60)}:${pad(ms / 1000 % 60)}.${pad(ms % 1000, 3)}`;
+        }
+
+        const log = (message, server = true, tag, cl) => {
+            const el = document.createElement('div')
+            el.classList.add(
+                'log',
+                message ? server ? 'log__server' : 'log__client' : 'break',
+                ...(cl ? [cl] : []),
+            )
+            if (message) {
+                let time = fmt_t(performance.now() - startTime)
+                let i = 0
+                while (i < time.length && (time[i] === '0' || time[i] === ':')) {
+                    i++;
+                }
+                if (i) {
+                    time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
+                }
+                el.innerHTML = `
+                        <div class="log__time">${time}</div>
+                        <div class="log__dir">${server ? 's' : 'c'}</div>
+                        ${tag && `<div class="log__tag">${tag}</div>`}
+                        <div class="log__content">${message}</div>`
+            }
+            dest.appendChild(el)
+        }
+        return {
+            log,
+            clear: () => void (dest.innerHTML = '')
+        }
+    })()
+
+    const socket = ({url}) => (() => {
+        let conn, finish, handlers = [];
+        const log = (m) => void gui.log(m, LOG_LOCAL, 'WS');
+
+        const closeCodes = {
+            1000: 'Normal Closure', 1001: 'Going Away', 1002: 'Protocol error', 1003: 'Unsupported Data',
+            1004: 'Reserved', 1005: 'No Status Rcvd', 1006: 'Abnormal Closure', 1007: 'Invalid frame payload data',
+            1008: 'Policy Violation', 1009: 'Message Too Big', 1010: 'Mandatory Ext.', 1011: 'Internal Error',
+            1012: 'Service Restart', 1013: 'Try Again Later', 1014: 'Bad Gateway', 1015: 'TLS handshake',
+        }
+
+        const connect = (opts) => new Promise(function (resolve, reject) {
+            let params;
+            if (opts) {
+                params = new URLSearchParams(opts).toString()
+            }
+
+            const address = `${url}${params ? `?${params}` : ''}`
+            log(`connect to ${address}`)
+
+            conn = new WebSocket(address)
+            conn.onmessage = e => {
+                const msg = JSON.parse(e.data)
+                if (!msg) {
+                    log('error: failed to parse msg')
+                }
+                handlers.forEach(h => h(msg))
+            }
+            conn.onopen = e => {
+                log('→ opened')
+                resolve(e)
+            }
+            conn.onclose = e => {
+                if (finish) {
+                    finish()
+                    finish = null
+                }
+                log(`→ closed: ${e.code} (${closeCodes[e.code]})`)
+            }
+            conn.onerror = e => {
+                log(`→ fail${e.message ? `: ${e.message}` : ''}`)
+                reject(e)
+            }
+        })
+
+        const disconnect = () => new Promise(function (resolve) {
+            if (!conn) return;
+            handlers = []
+            finish = resolve
+            conn.close(1000)
+            conn = null
+        })
+
+        // noinspection JSUnusedGlobalSymbols
+        return {
+            connect,
+            disconnect,
+            send: (data) => conn.send(data),
+            set onmessage(handler) {
+                handlers.push(handler)
+            },
+        }
+    })();
+
+    const webrtc = ({_api, transport}) => (() => {
+        let pc, dc;
+        const log = {
+            ice: (m, remote = LOG_LOCAL) => gui.log(m, remote, 'ICE'),
+            rtc: (m, remote = LOG_LOCAL, cl) => gui.log(m, remote, 'RTC', cl),
+        }
+
+        const signal = {
+            send: (dat) => transport.send(JSON.stringify(dat)),
+            connect: async (opts) => transport.connect(opts),
+            disconnect: async _ => transport.disconnect(),
+            set wire(handler) {
+                transport.onmessage = handler
+            }
+        }
+
+        const api = _api(signal)
+
+        const connectionInfo = (conn) => {
+            const {address, port, protocol, candidateType} = conn
+            return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
+        }
+
+        const connect = async ({flip_offer_side, ice_lite, ice_servers, log_level, test_nat, port}) => {
+            connectTime = startTime = performance.now();
+            log.rtc('Start')
+            try {
+                const opts = Object.assign({},
+                    flip_offer_side && {flip_offer_side},
+                    ice_lite && {ice_lite},
+                    ice_servers && {ice_servers},
+                    log_level && {log_level},
+                    test_nat && {test_nat},
+                    port && {port},
+                )
+                await signal.connect(opts)
+            } catch (e) {
+                return
+            }
+
+            const ices = (options.webrtc.ice_servers || []).map(s => ({urls: s}))
+            // !to add error handler
+            pc = new RTCPeerConnection({iceServers: ices})
+
+            pc.onconnectionstatechange = async _ => {
+                log.rtc(`→ ${pc.connectionState}`)
+                if (pc.connectionState !== 'connected') {
+                    return
+                }
+
+                let local, localId, remote, remoteId, progress = false;
+                let stats = await pc.getStats();
+                for (const value of stats.values()) {
+                    switch (value.type) {
+                        case 'candidate-pair':
+                            switch (value.state) {
+                                case 'succeeded':
+                                    remoteId = value.remoteCandidateId
+                                    localId = value.localCandidateId
+                                    break;
+                                case 'in-progress':
+                                    if (value.nominated) {
+                                        progress = true
+                                        remoteId = value.remoteCandidateId
+                                        localId = value.localCandidateId
+                                    }
+                                    break;
+                            }
+                            break;
+                        case 'local-candidate':
+                        case 'remote-candidate':
+                            if (localId && value.id === localId) {
+                                local = value
+                            }
+                            if (remoteId && value.id === remoteId) {
+                                remote = value
+                            }
+                            break;
+                    }
+                }
+                const dest = document.getElementById('connection')
+                const frag = document.createDocumentFragment()
+                const text = document.createElement('div')
+                text.classList.add('connection__pair')
+                if (!local || !remote) {
+                    text.innerText = `no pair );`
+                    log.rtc(`no pair!`)
+                } else {
+                    const elapsed = Math.floor(performance.now() - connectTime)
+                    const pair = (progress ? '[in-progress] ' : '') +
+                        `${connectionInfo(local)} --- ${connectionInfo(remote)} (${elapsed} ms)`
+                    text.innerText = pair
+                    log.rtc(`done / ${pair}`, LOG_LOCAL, 'notice')
+                }
+                frag.append(text)
+                dest.append(frag)
+            }
+            pc.oniceconnectionstatechange = _ => log.ice(`→ ${pc.iceConnectionState}`)
+            pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
+            pc.onsignalingstatechange = _ => gui.log(`→ ${pc.signalingState}`, LOG_LOCAL, 'sig')
+
+            const bin = (e) => log.rtc(e.data
+                .replaceAll('1', String.fromCharCode(9679))
+                .replaceAll('0', String.fromCharCode(9675)), LOG_REMOTE)
+
+            if (options.webrtc.flip_offer_side) {
+                pc.ondatachannel = e => {
+                    dc = e.channel
+                    dc.onmessage = bin
+                    // ch.onopen = myHandleOpen;
+                    // ch.onclose = myHandleClose;
+                }
+            } else {
+                dc = pc.createDataChannel('data');
+                dc.onmessage = bin
+            }
+
+            pc.onicecandidate = e => {
+                if (!e.candidate) return;
+
+                let {address, candidate} = e.candidate
+                if (!options.log.show_public_ip) {
+                    if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2\d|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z\d.-]+\.local)/.test(address)) {
+                        candidate = candidate.replace(address, '¯ \\ _ (ツ) _ / ¯')
+                    }
+                }
+                log.ice(`local ${candidate}`)
+                if (candidate !== "") {
+                    api.send.webrtc.ice(e.candidate)
+                }
+            }
+
+            signal.wire = async (message) => {
+                switch (message.t) {
+                    case "ANSWER":
+                        await pc.setRemoteDescription(message.p)
+                        log.rtc(`SDP answer: ${message.p.sdp}`, LOG_REMOTE)
+                        return
+                    case "ICE":
+                        // !to handle TypeError
+                        // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
+                        pc.addIceCandidate(message.p)
+                            .catch(e => log.ice(`Failure during addIceCandidate(): ${e.name}`))
+                        log.ice(`remote ${message.p.candidate}`, LOG_REMOTE)
+                        return
+                    case "LOG":
+                        gui.log(message.p.text, LOG_REMOTE, message.p.tag)
+                        return
+                    case "OFFER":
+                        log.rtc(`SDP offer: ${message.p.sdp}`, LOG_REMOTE)
+                        await pc.setRemoteDescription(message.p)
+                        const answer = await pc.createAnswer()
+                        api.send.webrtc.answer(answer)
+                        log.rtc(`SDP answer: ${answer.sdp}`)
+                        await pc.setLocalDescription(answer)
+                        return
+                    case "CLOSE":
+                        await signal.disconnect()
+                        log.rtc('Stop')
+                        gui.log()
+                        return
+                }
+            }
+
+            if (options.webrtc.flip_offer_side) {
+                api.send.webrtc.wait_offer()
+            } else {
+                pc.createOffer().then(offer => {
+                    log.rtc(`SDP offer: ${offer.sdp}`)
+                    pc.setLocalDescription(offer)
+                    api.send.webrtc.offer(offer)
+                })
+            }
+        }
+        const disconnect = async () => {
+            if (!pc) return
+            if (dc) {
+                dc.close()
+            }
+            pc.close()
+            api.terminate()
+        }
+        return {
+            connect,
+            disconnect,
+        }
+    })();
+
+    (() => {
+        const downloadToFile = (content, filename, contentType) => {
+            const file = new Blob([content], {type: contentType});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(file);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+
+        const server = webrtc({_api: api, transport: socket({url: `ws://${window.location.host}/websocket`})});
+
+        const control = document.getElementById('controls__button');
+        let active = false;
+        control.addEventListener('click', async () => {
+            active = !active
+            if (active) {
+                control.textContent = 'Stop'
+                await server.connect({
+                    flip_offer_side: options.webrtc.flip_offer_side,
+                    ice_lite: options.webrtc.ice_lite,
+                    ice_servers: options.webrtc.ice_servers,
+                    log_level: options.webrtc.log_level,
+                    test_nat: options.webrtc.test_nat,
+                    port: options.webrtc.port,
+                })
+            } else {
+                control.textContent = 'Start'
+                await server.disconnect()
+            }
+        })
+
+        document.getElementById('log_clear')
+            .addEventListener('click', gui.clear)
+
+        document.getElementById('log_save')
+            .addEventListener('click', () => {
+                const txt = document.getElementById('log_messages');
+                let text = '';
+                let children = txt.children;
+                for (let i = 0; i < children.length; i++) {
+                    let row = children[i];
+                    let children_ = row.children;
+                    let line = '';
+                    for (let j = 0; j < children_.length; j++) {
+                        let field = children_[j];
+                        line += field.innerText;
+                        line += ' '
+                    }
+                    text += line
+                    text += '\r\n';
+                }
+                downloadToFile(text, 'my-new-file.txt', 'text/plain');
+            })
+    })()
+</script>
+</html>
