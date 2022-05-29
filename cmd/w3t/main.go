@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// read cmd flags
-	live := flag.Bool("live", true, "use live webui")
+	live := flag.Bool("live", false, "use live webui")
 	addr := flag.String("addr", ":3000", "a web server address")
 	flag.Parse()
 
