@@ -13,7 +13,7 @@ jobs:
     name: Build
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ ubuntu-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -25,7 +25,6 @@ jobs:
           go build -ldflags "-w -s" -o ./build/ ./cmd/w3t 
 
       - uses: crazy-max/ghaction-upx@v2
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'windows-latest'
         with:
           version: latest
           files: |
