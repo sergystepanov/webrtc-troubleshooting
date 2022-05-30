@@ -23,7 +23,16 @@ type socket struct {
 	closed bool
 }
 
-func (s *socket) close()                      { s.closed = true }
+func (s *socket) close() { s.closed = true }
+func (s *socket) ended(err error) bool {
+	if errors.Is(err, io.EOF) {
+		if err := s.WriteClose(1000); err != nil {
+			log.Printf("error: failed signal close, %v", err)
+		}
+		return true
+	}
+	return false
+}
 func (s *socket) receive(m interface{}) error { return websocket.JSON.Receive(s.Conn, m) }
 func (s *socket) send(m interface{}) error {
 	if s.closed {
@@ -47,12 +56,29 @@ func remoteLogger(s *socket) func(tag string, format string, v ...any) string {
 func Handler() websocket.Handler {
 	status := func() string { return fmt.Sprintf("%08b", rand.Intn(256)) }
 
+	sendGarbage := func(d *pion.DataChannel, done chan struct{}) func() {
+		return func() {
+			_ = d.SendText(status())
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					_ = d.SendText(status())
+				}
+			}
+		}
+	}
+
 	return func(wc *websocket.Conn) {
 		signal := socket{wc, false}
 		done := make(chan struct{})
 
 		q := signal.Request().URL.Query()
 
+		disableInterceptors := q.Get("disable_interceptors") == "true"
 		flip := q.Get("flip_offer_side") == "true"
 		logLevel := q.Get("log_level")
 		testNat := q.Get("test_nat") == "true"
@@ -76,7 +102,7 @@ func Handler() websocket.Handler {
 			stun.Main(logger.NewLogger("stun"))
 		}
 
-		p2p, err := pion.NewPeerConnection(strings.Split(iceServers, ","), port, logger)
+		p2p, err := pion.NewPeerConnection(strings.Split(iceServers, ","), disableInterceptors, port, logger)
 		if err != nil {
 			panic(err)
 		}
@@ -86,21 +112,7 @@ func Handler() websocket.Handler {
 			if err != nil {
 				panic(err)
 			}
-
-			dc.OnOpen(func() {
-				_ = dc.SendText(status())
-				ticker := time.NewTicker(10 * time.Second)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-done:
-						_log("sys", "STOP TICKER!")
-						return
-					case _ = <-ticker.C:
-						_ = dc.SendText(status())
-					}
-				}
-			})
+			dc.OnOpen(sendGarbage(dc, done))
 		}
 
 		p2p.OnIceCandidate(func(c *webrtc.ICECandidate) {
@@ -117,37 +129,17 @@ func Handler() websocket.Handler {
 		p2p.OnIceGatheringStateChange(func(state webrtc.ICEGathererState) { _log("ice", "→ %s", state) })
 		p2p.OnSignalingStateChange(func(state webrtc.SignalingState) { _log("sig", "→ %s", state) })
 
-		p2p.OnDataChannel(func(d *pion.DataChannel) {
-			d.OnOpen(func() {
-				_ = d.SendText(status())
-				ticker := time.NewTicker(10 * time.Second)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-done:
-						_log("sys", "STOP TICKER!")
-						return
-					case _ = <-ticker.C:
-						_ = d.SendText(status())
-					}
-				}
-			})
-		})
+		p2p.OnDataChannel(func(d *pion.DataChannel) { d.OnOpen(sendGarbage(d, done)) })
 
 		defer func() {
 			// !to wait for message drain
-
 			done <- struct{}{}
 			signal.close()
 		}()
 
 		for {
 			var m api.Message
-			err := signal.receive(&m)
-			if errors.Is(err, io.EOF) {
-				if err := signal.WriteClose(1000); err != nil {
-					log.Printf("error: failed signal close, %v", err)
-				}
+			if err := signal.receive(&m); signal.ended(err) {
 				log.Printf("Signal has been closed!")
 				return
 			} else if err != nil {

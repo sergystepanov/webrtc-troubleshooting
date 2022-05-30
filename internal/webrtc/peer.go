@@ -1,7 +1,6 @@
 package webrtc
 
 import (
-	"log"
 	"net"
 
 	"github.com/pion/interceptor"
@@ -38,11 +37,15 @@ func DefaultConnection(conf Config) (*Connection, error) {
 		return nil, err
 	}
 
+	log := conf.Logger.NewLogger("conf")
+
 	i := &interceptor.Registry{}
 	if !conf.DisableDefaultInterceptors {
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
 			return nil, err
 		}
+	} else {
+		log.Debugf("Default interceptors have been disabled")
 	}
 
 	var udpConn *net.UDPConn
@@ -52,7 +55,7 @@ func DefaultConnection(conf Config) (*Connection, error) {
 		settingEngine = webrtc.SettingEngine{LoggerFactory: conf.Logger}
 	}
 	if conf.DtlsRole > 0 {
-		log.Printf("A custom DTLS role [%v]", conf.DtlsRole)
+		log.Debugf("A custom DTLS role [%v]", conf.DtlsRole)
 		if err := settingEngine.SetAnsweringDTLSRole(webrtc.DTLSRole(conf.DtlsRole)); err != nil {
 			panic(err)
 		}
@@ -71,12 +74,13 @@ func DefaultConnection(conf Config) (*Connection, error) {
 				panic(err)
 			}
 			udpConn = udpListener
-			log.Printf("Listening for WebRTC traffic at %s", udpListener.LocalAddr())
+			log.Debugf("Listening for WebRTC traffic at %s", udpListener.LocalAddr())
 			settingEngine.SetICEUDPMux(webrtc.NewICEUDPMux(nil, udpListener))
 		}
 	}
 	if conf.IceIpMap != "" {
 		settingEngine.SetNAT1To1IPs([]string{conf.IceIpMap}, webrtc.ICECandidateTypeHost)
+		log.Debugf("NAT map is %v", conf.IceIpMap)
 	}
 	settings = settingEngine
 

@@ -232,6 +232,10 @@
                 <label>Disable default Interceptors
                     <input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/>
                 </label>
+                <div class="options__description">
+                    Disables default Pion interceptors -- functions that allow a custom RTP/RTCP processing.
+                    More info is <a href="https://github.com/pion/webrtc/blob/master/interceptor.go" target="_blank">here</a>.
+                </div>
             </div>
             <div class="options">
                 <label>Logging level (server)
@@ -310,15 +314,16 @@
             show_public_ip: true
         },
         webrtc: {
+            disable_interceptors: false,
+            flip_offer_side: false,
+            ice_lite: false,
             ice_servers: [
                 'stun:stun.nextcloud.com:443',
                 'stun:stun.l.google.com:19302'
             ],
-            flip_offer_side: false,
-            ice_lite: false,
             log_level: 4,
-            test_nat: false,
             port: undefined,
+            test_nat: false,
         },
     }
 
@@ -517,17 +522,26 @@
             return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
         }
 
-        const connect = async ({flip_offer_side, ice_lite, ice_servers, log_level, test_nat, port}) => {
+        const connect = async ({
+                                   disable_interceptors,
+                                   flip_offer_side,
+                                   ice_lite,
+                                   ice_servers,
+                                   log_level,
+                                   test_nat,
+                                   port
+                               }) => {
             connectTime = startTime = performance.now();
             log.rtc('Start')
             try {
                 const opts = Object.assign({},
+                    disable_interceptors && {disable_interceptors},
                     flip_offer_side && {flip_offer_side},
                     ice_lite && {ice_lite},
                     ice_servers && {ice_servers},
                     log_level && {log_level},
-                    test_nat && {test_nat},
                     port && {port},
+                    test_nat && {test_nat},
                 )
                 await signal.connect(opts)
             } catch (e) {
@@ -701,6 +715,7 @@
             if (active) {
                 control.textContent = 'Stop'
                 await server.connect({
+                    disable_interceptors: options.webrtc.disable_interceptors,
                     flip_offer_side: options.webrtc.flip_offer_side,
                     ice_lite: options.webrtc.ice_lite,
                     ice_servers: options.webrtc.ice_servers,
