@@ -80,10 +80,11 @@ func Handler() websocket.Handler {
 
 		disableInterceptors := q.Get("disable_interceptors") == "true"
 		flip := q.Get("flip_offer_side") == "true"
-		logLevel := q.Get("log_level")
-		testNat := q.Get("test_nat") == "true"
 		iceServers := q.Get("ice_servers")
+		logLevel := q.Get("log_level")
 		port := q.Get("port")
+		testNat := q.Get("test_nat") == "true"
+		nat1to1 := q.Get("nat1to1")
 
 		_log := remoteLogger(&signal)
 
@@ -102,7 +103,7 @@ func Handler() websocket.Handler {
 			stun.Main(logger.NewLogger("stun"))
 		}
 
-		p2p, err := pion.NewPeerConnection(strings.Split(iceServers, ","), disableInterceptors, port, logger)
+		p2p, err := pion.NewPeerConnection(strings.Split(iceServers, ","), disableInterceptors, port, nat1to1, logger)
 		if err != nil {
 			panic(err)
 		}

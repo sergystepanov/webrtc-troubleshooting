@@ -1,7 +1,9 @@
 package webrtc
 
 import (
+	"fmt"
 	"net"
+	"strings"
 
 	"github.com/pion/interceptor"
 	"github.com/pion/logging"
@@ -19,12 +21,12 @@ type (
 	Config struct {
 		DisableDefaultInterceptors bool
 		DtlsRole                   int
-		IceIpMap                   string
 		IceLite                    bool
 		IcePortMin                 int
 		IcePortMax                 int
 		IceServers                 []webrtc.ICEServer
 		Logger                     logging.LoggerFactory
+		Nat1to1                    string
 		SinglePort                 int
 	}
 )
@@ -50,21 +52,21 @@ func DefaultConnection(conf Config) (*Connection, error) {
 
 	var udpConn *net.UDPConn
 
-	settingEngine := webrtc.SettingEngine{}
+	se := webrtc.SettingEngine{}
 	if conf.Logger != nil {
-		settingEngine = webrtc.SettingEngine{LoggerFactory: conf.Logger}
+		se = webrtc.SettingEngine{LoggerFactory: conf.Logger}
 	}
 	if conf.DtlsRole > 0 {
 		log.Debugf("A custom DTLS role [%v]", conf.DtlsRole)
-		if err := settingEngine.SetAnsweringDTLSRole(webrtc.DTLSRole(conf.DtlsRole)); err != nil {
+		if err := se.SetAnsweringDTLSRole(webrtc.DTLSRole(conf.DtlsRole)); err != nil {
 			panic(err)
 		}
 	}
 	if conf.IceLite {
-		settingEngine.SetLite(conf.IceLite)
+		se.SetLite(conf.IceLite)
 	}
 	if conf.IcePortMin > 0 && conf.IcePortMax > 0 {
-		if err := settingEngine.SetEphemeralUDPPortRange(uint16(conf.IcePortMin), uint16(conf.IcePortMax)); err != nil {
+		if err := se.SetEphemeralUDPPortRange(uint16(conf.IcePortMin), uint16(conf.IcePortMax)); err != nil {
 			panic(err)
 		}
 	} else {
@@ -75,14 +77,18 @@ func DefaultConnection(conf Config) (*Connection, error) {
 			}
 			udpConn = udpListener
 			log.Debugf("Listening for WebRTC traffic at %s", udpListener.LocalAddr())
-			settingEngine.SetICEUDPMux(webrtc.NewICEUDPMux(nil, udpListener))
+			se.SetICEUDPMux(webrtc.NewICEUDPMux(nil, udpListener))
 		}
 	}
-	if conf.IceIpMap != "" {
-		settingEngine.SetNAT1To1IPs([]string{conf.IceIpMap}, webrtc.ICECandidateTypeHost)
-		log.Debugf("NAT map is %v", conf.IceIpMap)
+	if conf.Nat1to1 != "" {
+		if ip, ct, err := parseNatCandidate(conf.Nat1to1); err == nil {
+			se.SetNAT1To1IPs(ip, ct)
+			log.Debugf("Using 1:1 NAT %s", conf.Nat1to1)
+		} else {
+			log.Errorf("NAT map error: %v", err)
+		}
 	}
-	settings = settingEngine
+	settings = se
 
 	peerConf := webrtc.Configuration{ICEServers: []webrtc.ICEServer{}}
 	if len(conf.IceServers) > 0 {
@@ -99,6 +105,16 @@ func DefaultConnection(conf Config) (*Connection, error) {
 		listener: udpConn,
 	}
 	return &conn, nil
+}
+
+func parseNatCandidate(v string) (ips []string, candidateType webrtc.ICECandidateType, err error) {
+	parts := strings.Split(v, "/")
+	if len(parts) < 2 {
+		return nil, 0, fmt.Errorf("wrong ICE IP NAT mapping format, %v", parts)
+	}
+	ips = []string{parts[0]}
+	candidateType, err = webrtc.NewICECandidateType(parts[1])
+	return
 }
 
 func (p *Connection) Connect() error {

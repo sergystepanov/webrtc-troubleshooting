@@ -25,9 +25,10 @@ func (dc *DataChannel) SendText(text string) error {
 	return dc.ch.SendText(text)
 }
 
-func NewPeerConnection(iceServers []string, disableInterceptors bool, port string, logger logging.LoggerFactory) (*Peer, error) {
+func NewPeerConnection(iceServers []string, disableInterceptors bool, port, nat1to1 string, logger logging.LoggerFactory) (*Peer, error) {
 	conf := Config{
 		DisableDefaultInterceptors: disableInterceptors,
+		Nat1to1:                    nat1to1,
 		Logger:                     logger,
 	}
 	if len(iceServers) > 0 {

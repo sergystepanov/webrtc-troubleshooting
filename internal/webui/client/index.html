@@ -261,7 +261,7 @@
             </div>
             <div class="options">
                 <label>Use 1:1 NAT mapping
-                    <input id="opt-webrtc-one_to_one" type="text" data-default=""/>
+                    <input id="opt-webrtc-nat1to1" type="text" data-default=""/>
                 </label>
                 <div class="options__description">
                     1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
@@ -322,6 +322,7 @@
                 'stun:stun.l.google.com:19302'
             ],
             log_level: 4,
+            nat1to1: undefined,
             port: undefined,
             test_nat: false,
         },
@@ -528,6 +529,7 @@
                                    ice_lite,
                                    ice_servers,
                                    log_level,
+                                   nat1to1,
                                    test_nat,
                                    port
                                }) => {
@@ -540,6 +542,7 @@
                     ice_lite && {ice_lite},
                     ice_servers && {ice_servers},
                     log_level && {log_level},
+                    nat1to1 && {nat1to1},
                     port && {port},
                     test_nat && {test_nat},
                 )
@@ -720,6 +723,7 @@
                     ice_lite: options.webrtc.ice_lite,
                     ice_servers: options.webrtc.ice_servers,
                     log_level: options.webrtc.log_level,
+                    nat1to1: options.webrtc.nat1to1,
                     test_nat: options.webrtc.test_nat,
                     port: options.webrtc.port,
                 })
