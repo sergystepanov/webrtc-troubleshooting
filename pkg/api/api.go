@@ -17,14 +17,6 @@ const (
 )
 
 type (
-	Answer struct {
-		typed
-		Payload webrtc.SessionDescription `json:"p"`
-	}
-	Offer struct {
-		typed
-		Payload webrtc.SessionDescription `json:"p"`
-	}
 	ICE struct {
 		typed
 		Payload webrtc.ICECandidateInit `json:"p"`
@@ -49,6 +41,11 @@ type (
 	SessionDescription struct {
 		webrtc.SessionDescription
 	}
+	// SDP answer/offer
+	SDP struct {
+		typed
+		Payload webrtc.SessionDescription `json:"p"`
+	}
 	typed struct {
 		T MessageType `json:"t"`
 	}
@@ -66,12 +63,10 @@ func NewIceCandidateInit(data []byte) (webrtc.ICECandidateInit, error) {
 	return candidate, err
 }
 
-func NewAnswer(sdp webrtc.SessionDescription) Answer {
-	return Answer{typed: typed{WebrtcAnswer}, Payload: sdp}
+func NewSDP(s webrtc.SessionDescription, t MessageType) SDP {
+	return SDP{typed: typed{t}, Payload: s}
 }
-func NewOffer(sdp webrtc.SessionDescription) Offer {
-	return Offer{typed: typed{WebrtcOffer}, Payload: sdp}
-}
+
 func NewIce(candidate webrtc.ICECandidate) ICE {
 	return ICE{typed: typed{WebrtcIce}, Payload: candidate.ToJSON()}
 }

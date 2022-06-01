@@ -164,7 +164,7 @@ func Handler() websocket.Handler {
 					_log("rtc", "err: %v", err)
 					return
 				}
-				if err = signal.send(api.NewAnswer(*answer)); err != nil {
+				if err = signal.send(api.NewSDP(*answer, api.WebrtcAnswer)); err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
@@ -181,7 +181,7 @@ func Handler() websocket.Handler {
 					_log("rtc", "err: %v", err)
 					return
 				}
-				if err = signal.send(api.NewOffer(*offer)); err != nil {
+				if err = signal.send(api.NewSDP(*offer, api.WebrtcOffer)); err != nil {
 					_log("rtc", "err: %v", err)
 					return
 				}
