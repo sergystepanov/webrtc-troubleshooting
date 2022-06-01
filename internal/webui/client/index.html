@@ -83,10 +83,10 @@
         }
 
         .options {
-            align-items: center;
             display: flex;
 
-            justify-content: space-between;
+            flex-direction: column;
+
             border-bottom: 1px solid rgba(0, 0, 0, 0.3);
 
             margin: 0;
@@ -98,6 +98,7 @@
         }
 
         .options__description {
+            padding-top: 1em;
             font-size: 80%;
         }
 
@@ -215,18 +216,28 @@
             <div class="options">
                 <label>STUN/TURN servers
                     <textarea id="opt-webrtc-ice_servers" cols="26" rows="3"
-                              data-default="stun:stun.nextcloud.com:443,stun:stun.l.google.com:19302">stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302</textarea>
+                              data-default="stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302">stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302</textarea>
                 </label>
             </div>
             <div class="options">
                 <label>Determine NAT type
                     <input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/>
                 </label>
+                <div class="options__description">
+                    This stuff is based on Pion's STUN tester. More <a href="https://github.com/pion/stun/tree/master/cmd/stun-nat-behaviour" target="_blank">info</a>.
+                    It implements RFC5780's tests:
+                    - 4.3.  Determining NAT Mapping Behavior
+                    - 4.4.  Determining NAT Filtering Behavior
+                </div>
             </div>
             <div class="options">
-                <label>Flip the offer and the answer sides
+                <label>Make server do offer
                     <input id="opt-webrtc-flip_offer_side" type="checkbox" data-default="false"/>
                 </label>
+                <div class="options__description">
+                    By default, it is the client browser who makes the initial offer, and this options switches
+                    it to the server.
+                </div>
             </div>
             <div class="options">
                 <label>Disable default Interceptors
