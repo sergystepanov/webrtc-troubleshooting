@@ -12,9 +12,9 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
+	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/api"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/stun"
 	pion "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
-	"github.com/sergystepanov/webrtc-troubleshooting/v2/pkg/api"
 	"golang.org/x/net/websocket"
 )
 
@@ -26,7 +26,7 @@ type socket struct {
 func (s *socket) close() { s.closed = true }
 func (s *socket) ended(err error) bool {
 	if errors.Is(err, io.EOF) {
-		if err := s.WriteClose(1000); err != nil {
+		if err := s.Conn.Close(); err != nil {
 			log.Printf("error: failed signal close, %v", err)
 		}
 		return true
@@ -46,8 +46,10 @@ func remoteLogger(s *socket) func(tag string, format string, v ...any) string {
 		m := fmt.Sprintf(format, v...)
 		line := fmt.Sprintf("%s %s", tag, m)
 		log.Printf(line)
-		if err := s.send(api.NewLog(api.Log{Tag: tag, Text: m})); err != nil {
-			log.Printf("log err: %v", err)
+		if !s.closed {
+			if err := s.send(api.NewLog(api.Log{Tag: tag, Text: m})); err != nil {
+				log.Printf("log [%v] err: %v", line, err)
+			}
 		}
 		return line
 	}
@@ -80,7 +82,7 @@ func Handler() websocket.Handler {
 
 		disableInterceptors := q.Get("disable_interceptors") == "true"
 		flip := q.Get("flip_offer_side") == "true"
-		iceServers := q.Get("ice_servers")
+		iceServers := strings.Split(q.Get("ice_servers"), ",")
 		logLevel := q.Get("log_level")
 		port := q.Get("port")
 		testNat := q.Get("test_nat") == "true"
@@ -103,9 +105,10 @@ func Handler() websocket.Handler {
 			stun.Main(logger.NewLogger("stun"))
 		}
 
-		p2p, err := pion.NewPeerConnection(strings.Split(iceServers, ","), disableInterceptors, port, nat1to1, logger)
+		p2p, err := pion.NewPeerConnection(iceServers, disableInterceptors, port, nat1to1, logger)
 		if err != nil {
-			panic(err)
+			_log("sys", "fail: %v", err)
+			return
 		}
 
 		if flip {
@@ -192,9 +195,8 @@ func Handler() websocket.Handler {
 				if err != nil {
 					log.Printf("close err: %v", err)
 				}
-				if err = signal.send(api.NewClose()); err != nil {
+				if err := signal.send(api.NewClose()); err != nil {
 					_log("sig", "err: %v", err)
-					return
 				}
 			default:
 				_log("sys", "err: unknown message [%v]", m.T)

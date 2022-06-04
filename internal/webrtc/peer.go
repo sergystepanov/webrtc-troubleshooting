@@ -71,7 +71,7 @@ func DefaultConnection(conf Config) (*Connection, error) {
 		}
 	} else {
 		if conf.SinglePort > 0 {
-			udpListener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: conf.SinglePort})
+			udpListener, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: conf.SinglePort})
 			if err != nil {
 				panic(err)
 			}
