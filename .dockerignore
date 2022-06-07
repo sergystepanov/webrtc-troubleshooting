@@ -1,0 +1,10 @@
+.git/
+.gitignore
+
+.github/
+.idea/
+build/
+
+Dockerfile
+LICENSE
+README.md
