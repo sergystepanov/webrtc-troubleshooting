@@ -15,6 +15,15 @@ type (
 	Peer struct {
 		conn *Connection
 	}
+	State interface {
+		~int | ~int32 | ~uint32
+		String() string
+	}
+	ICECandidate        = webrtc.ICECandidate
+	ICEConnectionState  = webrtc.ICEConnectionState
+	ICEGathererState    = webrtc.ICEGathererState
+	PeerConnectionState = webrtc.PeerConnectionState
+	SignalingState      = webrtc.SignalingState
 )
 
 func (dc *DataChannel) OnOpen(fn func()) { dc.ch.OnOpen(fn) }
@@ -64,19 +73,19 @@ func (p *Peer) CreateDataChannel(name string) (*DataChannel, error) {
 	return &DataChannel{ch}, nil
 }
 
-func (p *Peer) OnIceCandidate(fn func(c *webrtc.ICECandidate)) {
+func (p *Peer) OnIceCandidate(fn func(c *ICECandidate)) {
 	p.conn.OnICECandidate(fn)
 }
-func (p *Peer) OnIceConnectionStateChange(fn func(state webrtc.ICEConnectionState)) {
+func (p *Peer) OnIceConnectionStateChange(fn func(state ICEConnectionState)) {
 	p.conn.OnICEConnectionStateChange(fn)
 }
-func (p *Peer) OnConnectionStateChange(fn func(state webrtc.PeerConnectionState)) {
+func (p *Peer) OnConnectionStateChange(fn func(state PeerConnectionState)) {
 	p.conn.OnConnectionStateChange(fn)
 }
-func (p *Peer) OnIceGatheringStateChange(fn func(state webrtc.ICEGathererState)) {
+func (p *Peer) OnIceGatheringStateChange(fn func(state ICEGathererState)) {
 	p.conn.OnICEGatheringStateChange(fn)
 }
-func (p *Peer) OnSignalingStateChange(fn func(state webrtc.SignalingState)) {
+func (p *Peer) OnSignalingStateChange(fn func(state SignalingState)) {
 	p.conn.OnSignalingStateChange(fn)
 }
 func (p *Peer) OnDataChannel(fn func(d *DataChannel)) {

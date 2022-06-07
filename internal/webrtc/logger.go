@@ -2,6 +2,7 @@ package webrtc
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/pion/logging"
 )
@@ -12,8 +13,10 @@ import (
 type customLogger struct {
 	subsystem string
 	level     logging.LogLevel
-	log       func(tag string, format string, v ...any) string
+	log       LogFn
 }
+
+type LogFn func(tag string, format string, v ...any) string
 
 func (c customLogger) logf(level logging.LogLevel, f string, args ...interface{}) {
 	if c.level.Get() < level {
@@ -44,7 +47,20 @@ func (c customLogger) Errorf(f string, args ...interface{}) {
 // add custom behavior
 type CustomLoggerFactory struct {
 	Level logging.LogLevel
-	Log   func(tag string, format string, v ...any) string
+	Log   LogFn
+}
+
+func NewLoggerFactory(lvl string, fn LogFn) CustomLoggerFactory {
+	logger := CustomLoggerFactory{
+		Level: logging.LogLevelTrace,
+		Log:   fn,
+	}
+	if lvl != "" {
+		if l, err := strconv.Atoi(lvl); err == nil {
+			logger.Level = logging.LogLevel(l)
+		}
+	}
+	return logger
 }
 
 func (c CustomLoggerFactory) NewLogger(subsystem string) logging.LeveledLogger {

@@ -6,15 +6,12 @@ import (
 	"io"
 	"log"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pion/logging"
-	"github.com/pion/webrtc/v3"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/api"
 	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/stun"
-	pion "github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
+	"github.com/sergystepanov/webrtc-troubleshooting/v2/internal/webrtc"
 	"golang.org/x/net/websocket"
 )
 
@@ -41,7 +38,7 @@ func (s *socket) send(m interface{}) error {
 	return websocket.JSON.Send(s.Conn, m)
 }
 
-func remoteLogger(s *socket) func(tag string, format string, v ...any) string {
+func remoteLogger(s *socket) webrtc.LogFn {
 	return func(tag string, format string, v ...any) string {
 		m := fmt.Sprintf(format, v...)
 		line := fmt.Sprintf("%s %s", tag, m)
@@ -55,10 +52,14 @@ func remoteLogger(s *socket) func(tag string, format string, v ...any) string {
 	}
 }
 
+func logState[T webrtc.State](tag string, l webrtc.LogFn) func(state T) {
+	return func(state T) { l(tag, "→ %s", state) }
+}
+
 func Handler() websocket.Handler {
 	status := func() string { return fmt.Sprintf("%08b", rand.Intn(256)) }
 
-	sendGarbage := func(d *pion.DataChannel, done chan struct{}) func() {
+	sendGarbage := func(d *webrtc.DataChannel, done chan struct{}) func() {
 		return func() {
 			_ = d.SendText(status())
 			ticker := time.NewTicker(10 * time.Second)
@@ -89,23 +90,14 @@ func Handler() websocket.Handler {
 		nat1to1 := q.Get("nat1to1")
 
 		_log := remoteLogger(&signal)
-
-		logger := pion.CustomLoggerFactory{
-			Level: logging.LogLevelTrace,
-			Log:   _log,
-		}
-		if logLevel != "" {
-			if l, err := strconv.Atoi(logLevel); err == nil {
-				logger.Level = logging.LogLevel(l)
-			}
-			_log("sys", "log level is %v", logger.Level)
-		}
+		logger := webrtc.NewLoggerFactory(logLevel, _log)
+		_log("sys", "log level is %v", logger.Level)
 
 		if testNat {
 			stun.Main(logger.NewLogger("stun"))
 		}
 
-		p2p, err := pion.NewPeerConnection(iceServers, disableInterceptors, port, nat1to1, logger)
+		p2p, err := webrtc.NewPeerConnection(iceServers, disableInterceptors, port, nat1to1, logger)
 		if err != nil {
 			_log("sys", "fail: %v", err)
 			return
@@ -128,12 +120,12 @@ func Handler() websocket.Handler {
 			}
 		})
 
-		p2p.OnIceConnectionStateChange(func(state webrtc.ICEConnectionState) { _log("ice", "→ %s", state) })
-		p2p.OnConnectionStateChange(func(state webrtc.PeerConnectionState) { _log("rtc", "→ %s", state) })
-		p2p.OnIceGatheringStateChange(func(state webrtc.ICEGathererState) { _log("ice", "→ %s", state) })
-		p2p.OnSignalingStateChange(func(state webrtc.SignalingState) { _log("sig", "→ %s", state) })
+		p2p.OnIceConnectionStateChange(logState[webrtc.ICEConnectionState]("ice", _log))
+		p2p.OnConnectionStateChange(logState[webrtc.PeerConnectionState]("rtc", _log))
+		p2p.OnIceGatheringStateChange(logState[webrtc.ICEGathererState]("ice", _log))
+		p2p.OnSignalingStateChange(logState[webrtc.SignalingState]("sig", _log))
 
-		p2p.OnDataChannel(func(d *pion.DataChannel) { d.OnOpen(sendGarbage(d, done)) })
+		p2p.OnDataChannel(func(d *webrtc.DataChannel) { d.OnOpen(sendGarbage(d, done)) })
 
 		defer func() {
 			// !to wait for message drain
