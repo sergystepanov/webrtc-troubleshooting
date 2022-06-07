@@ -75,9 +75,6 @@
             margin: 0.3em 0;
         }
 
-        .log__time {
-        }
-
         .grayed {
             color: rgba(0, 0, 0, .4);
         }
@@ -204,6 +201,7 @@
     <div id="connection"></div>
     <div class="controls">
         <button id="controls__button">Start</button>
+        <button id="test-rtc">Test</button>
     </div>
     <div class="opts">
         <div class="opts__header">
@@ -215,42 +213,42 @@
         <div class="opts__main">
             <div class="options">
                 <label>STUN/TURN servers
-                    <textarea id="opt-webrtc-ice_servers" cols="26" rows="3"
-                              data-default="stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302">stun:stun.nextcloud.com:443&#13;&#10;stun:stun.l.google.com:19302</textarea>
+                    <textarea id="opt-webrtc-ice_servers" cols="26" rows="3"></textarea>
                 </label>
             </div>
             <div class="options">
                 <label>Determine NAT type
-                    <input id="opt-webrtc-test_nat" type="checkbox" data-default="false"/>
+                    <input id="opt-webrtc-test_nat" type="checkbox"/>
                 </label>
                 <div class="options__description">
-                    This stuff is based on Pion's STUN tester. More <a href="https://github.com/pion/stun/tree/master/cmd/stun-nat-behaviour" target="_blank">info</a>.
+                    This stuff is based on Pion's STUN tester. More <a
+                        href="https://github.com/pion/stun/tree/master/cmd/stun-nat-behaviour" target="_blank">info</a>.
                     It implements RFC5780's tests:
-                    - 4.3.  Determining NAT Mapping Behavior
-                    - 4.4.  Determining NAT Filtering Behavior
+                    - 4.3. Determining NAT Mapping Behavior
+                    - 4.4. Determining NAT Filtering Behavior
                 </div>
             </div>
             <div class="options">
                 <label>Make server do offer
-                    <input id="opt-webrtc-flip_offer_side" type="checkbox" data-default="false"/>
+                    <input id="opt-webrtc-flip_offer_side" type="checkbox"/>
                 </label>
                 <div class="options__description">
                     By default, it is the client browser who makes the initial offer, and this options switches
-                    it to the server.
+                    it to the server
                 </div>
             </div>
             <div class="options">
                 <label>Disable default Interceptors
-                    <input id="opt-webrtc-disable_interceptors" type="checkbox" data-default="false"/>
+                    <input id="opt-webrtc-disable_interceptors" type="checkbox"/>
                 </label>
                 <div class="options__description">
                     Disables default Pion interceptors -- functions that allow a custom RTP/RTCP processing.
-                    More info is <a href="https://github.com/pion/webrtc/blob/master/interceptor.go" target="_blank">here</a>.
+                    More info is <a href="https://github.com/pion/webrtc/blob/master/interceptor.go" target="_blank">here</a>
                 </div>
             </div>
             <div class="options">
                 <label>Logging level (server)
-                    <select id="opt-webrtc-log_level" data-default="4">
+                    <select id="opt-webrtc-log_level">
                         <option value="0">Disabled</option>
                         <option value="1">Error</option>
                         <option value="2">Warning</option>
@@ -259,10 +257,13 @@
                         <option value="5">Trace</option>
                     </select>
                 </label>
+                <div class="options__description">
+                    Sets server logging level (default: DEBUG)
+                </div>
             </div>
             <div class="options">
                 <label>Use a single port
-                    <input id="opt-webrtc-port" type="number" min="1" max="65535" data-default=""/>
+                    <input id="opt-webrtc-port" type="number" min="1" max="65535"/>
                 </label>
                 <div class="options__description">
                     This options restricts WebRTC connections to use just one predefined port instead of
@@ -272,13 +273,13 @@
             </div>
             <div class="options">
                 <label>Use 1:1 NAT mapping
-                    <input id="opt-webrtc-nat1to1" type="text" data-default=""/>
+                    <input id="opt-webrtc-nat1to1" type="text"/>
                 </label>
                 <div class="options__description">
                     1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
                     traffic originating from that private IPv4 address
                     going to the Internet will be mapped by 1:1 NAT to the public IPv4 address defined in the entry,
-                    overriding the Outbound NAT configuration.
+                    overriding the Outbound NAT configuration
                 </div>
             </div>
         </div>
@@ -308,13 +309,13 @@
     const api = (wire) => ({
         send: {
             webrtc: {
-                answer: (answer) => void wire.send({t: "ANSWER", p: answer}),
-                ice: (candidate) => void wire.send({t: "ICE", p: candidate}),
-                offer: (offer) => void wire.send({t: "OFFER", p: offer}),
-                wait_offer: () => void wire.send({t: "WAITING_OFFER"}),
+                answer: (answer) => wire.send({t: "ANSWER", p: answer}),
+                ice: (candidate) => wire.send({t: "ICE", p: candidate}),
+                offer: (offer) => wire.send({t: "OFFER", p: offer}),
+                wait_offer: () => wire.send({t: "WAITING_OFFER"}),
             }
         },
-        terminate: () => void wire.send({t: "CLOSE"})
+        terminate: () => wire.send({t: "CLOSE"})
     })
 
     const LOG_LOCAL = false,
@@ -333,28 +334,30 @@
                 'stun:stun.l.google.com:19302'
             ],
             log_level: 4,
-            nat1to1: undefined,
-            port: undefined,
+            nat1to1: "",
+            port: "",
             test_nat: false,
         },
     }
+    const defaults = Object.freeze(options)
 
     const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
     const optsResetEvent = new Event('opts-reset');
 
     opts.forEach((opt) => {
         let listener, valueHolder;
-        let val = opt.dataset.default
 
         // opt-tag-option_name_ -> options = { tag : { option_name: default } }
         const _id = opt.id.replace('opt-', '').split('-')
         const tag = _id[0], optName = _id[1];
+        let val = defaults[tag][optName],
+            fromValue = (v) => v,
+            toValue = (v) => v
 
         switch (opt.tagName.toLowerCase()) {
             case 'input':
                 switch (opt.type) {
                     case 'checkbox':
-                        val = val === 'true'
                         listener = 'change'
                         valueHolder = 'checked'
                         break;
@@ -370,28 +373,34 @@
                 valueHolder = 'value'
                 break;
             case 'textarea':
-                val = (val || '').split(',')
+                fromValue = (v) => v ? v.split('\n') : []
+                toValue = (v) => v ? v.join('\r\n') : ''
                 listener = 'change'
                 valueHolder = 'value'
                 break;
         }
 
         if (listener && valueHolder) {
-            opt.addEventListener(listener, _ => options[tag][optName] = opt[valueHolder])
+            opt.addEventListener(listener, _ => {
+                options[tag][optName] = fromValue(opt[valueHolder])
+                console.table(options)
+            })
             opt.addEventListener('opts-reset', _ => {
                 options[tag][optName] = val
-                opt[valueHolder] = val
+                opt[valueHolder] = toValue(val)
             })
-            options[tag][optName] = val
+            opt[valueHolder] = toValue(val)
         }
     })
 
     // opts
     document.getElementById('opts_reset')
-        .addEventListener('click', _ => void opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
+        .addEventListener('click', _ => opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
 
     // time-time
     let startTime, connectTime;
+
+    const STATE_CLOSE = new Event('state-close');
 
     const gui = (() => {
         const forEl = (id, fn) => {
@@ -443,13 +452,12 @@
         }
         return {
             log,
-            clear: () => void (dest.innerHTML = '')
+            clear: () => (dest.innerHTML = '')
         }
     })()
 
-    const socket = ({url}) => (() => {
-        let conn, finish, handlers = [];
-        const log = (m) => void gui.log(m, LOG_LOCAL, 'WS');
+    const socket = ({url, onClose = () => ({}), log = () => ({})}) => (() => {
+        let conn, onMessage = () => ({}), finish;
 
         const closeCodes = {
             1000: 'Normal Closure', 1001: 'Going Away', 1002: 'Protocol error', 1003: 'Unsupported Data',
@@ -458,113 +466,132 @@
             1012: 'Service Restart', 1013: 'Try Again Later', 1014: 'Bad Gateway', 1015: 'TLS handshake',
         }
 
-        const connect = (opts) => new Promise(function (resolve, reject) {
-            let params;
-            if (opts) {
-                params = new URLSearchParams(opts).toString()
-            }
+        const active = () => conn && conn.readyState === 1
 
-            const address = `${url}${params ? `?${params}` : ''}`
-            log(`connect to ${address}`)
+        const connect = (opts) => new Promise((resolve, reject) => {
+            if (opts) url.search = new URLSearchParams(opts).toString()
+            log(`connect to ${url}`)
 
-            conn = new WebSocket(address)
-            conn.onmessage = e => {
-                const msg = JSON.parse(e.data)
-                if (!msg) {
+            conn = new WebSocket(url)
+            conn.onmessage = ev => {
+                const msg = JSON.parse(ev.data)
+                if (msg) {
+                    onMessage(msg)
+                } else {
                     log('error: failed to parse msg')
                 }
-                handlers.forEach(h => h(msg))
             }
-            conn.onopen = e => {
+            conn.onopen = ev => {
                 log('→ opened')
-                resolve(e)
+                resolve(ev)
             }
-            conn.onclose = e => {
+            conn.onclose = ev => {
                 if (finish) {
                     finish()
                     finish = null
                 }
-                log(`→ closed: ${e.code} (${closeCodes[e.code]})`)
+                log(`→ closed: ${ev.code} (${closeCodes[ev.code]})`)
+                onClose()
             }
-            conn.onerror = e => {
-                log(`→ fail${e.message ? `: ${e.message}` : ''}`)
-                reject(e)
+            conn.onerror = ev => {
+                log(`→ fail${ev.message ? `: ${ev.message}` : ''}`)
+                reject(ev)
             }
         })
 
-        const disconnect = () => new Promise(function (resolve) {
-            if (!conn) return;
-            handlers = []
+        const disconnect = () => new Promise((resolve) => {
+            if (!conn) {
+                resolve()
+                return
+            }
             finish = resolve
-            conn.close(1000)
+            conn.close()
             conn = null
         })
 
         // noinspection JSUnusedGlobalSymbols
         return {
+            active,
             connect,
             disconnect,
-            send: (data) => conn.send(data),
+            send: (data) => conn.send(JSON.stringify(data)),
             set onmessage(handler) {
-                handlers.push(handler)
+                onMessage = handler
             },
         }
     })();
 
-    const webrtc = ({_api, transport}) => (() => {
+    const webrtc = (api, signal) => (() => {
+        api = api(signal)
+
         let pc, dc;
         const log = {
             ice: (m, remote = LOG_LOCAL) => gui.log(m, remote, 'ICE'),
             rtc: (m, remote = LOG_LOCAL, cl) => gui.log(m, remote, 'RTC', cl),
         }
 
-        const signal = {
-            send: (dat) => transport.send(JSON.stringify(dat)),
-            connect: async (opts) => transport.connect(opts),
-            disconnect: async _ => transport.disconnect(),
-            set wire(handler) {
-                transport.onmessage = handler
+        signal.onmessage = async (message) => {
+            switch (message.t) {
+                case "ANSWER":
+                    await pc.setRemoteDescription(message.p)
+                    log.rtc(`SDP answer: ${message.p.sdp}`, LOG_REMOTE)
+                    return
+                case "ICE":
+                    // !to handle TypeError
+                    // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
+                    pc.addIceCandidate(message.p)
+                        .catch(e => log.ice(`Failure during addIceCandidate(): ${e.name}`))
+                    log.ice(`remote ${message.p.candidate}`, LOG_REMOTE)
+                    return
+                case "LOG":
+                    gui.log(message.p.text, LOG_REMOTE, message.p.tag)
+                    return
+                case "OFFER":
+                    log.rtc(`SDP offer: ${message.p.sdp}`, LOG_REMOTE)
+                    await pc.setRemoteDescription(message.p)
+                    const answer = await pc.createAnswer()
+                    api.send.webrtc.answer(answer)
+                    log.rtc(`SDP answer: ${answer.sdp}`)
+                    await pc.setLocalDescription(answer)
+                    return
+                case "CLOSE":
+                    await signal.disconnect()
+                    log.rtc('Stop')
+                    gui.log()
+                    return
             }
         }
-
-        const api = _api(signal)
 
         const connectionInfo = (conn) => {
             const {address, port, protocol, candidateType} = conn
             return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
         }
 
-        const connect = async ({
-                                   disable_interceptors,
-                                   flip_offer_side,
-                                   ice_lite,
-                                   ice_servers,
-                                   log_level,
-                                   nat1to1,
-                                   test_nat,
-                                   port
-                               }) => {
+        const connect = async (opts = {}) => {
             connectTime = startTime = performance.now();
             log.rtc('Start')
             try {
-                const opts = Object.assign({},
-                    disable_interceptors && {disable_interceptors},
-                    flip_offer_side && {flip_offer_side},
-                    ice_lite && {ice_lite},
-                    ice_servers && {ice_servers},
-                    log_level && {log_level},
-                    nat1to1 && {nat1to1},
-                    port && {port},
-                    test_nat && {test_nat},
-                )
+                // remove empty opts
+                opts = Object.entries(opts).reduce((a, [k, v]) => {
+                    if (v && v !== []) a[k] = v
+                    return a
+                }, {})
                 await signal.connect(opts)
-            } catch (e) {
+            } catch
+                (e) {
+                log.rtc(`err: ${e.message}`)
                 return
             }
 
-            const ices = (options.webrtc.ice_servers || []).map(s => ({urls: s}))
-            // !to add error handler
-            pc = new RTCPeerConnection({iceServers: ices})
+            try {
+                pc = new RTCPeerConnection({
+                    iceServers: (opts.ice_servers || []).map(s => ({urls: s}))
+                })
+            } catch (e) {
+                log.rtc(`err: ${e.message}`)
+                document.dispatchEvent(STATE_CLOSE)
+                return
+            }
 
             pc.onconnectionstatechange = async _ => {
                 log.rtc(`→ ${pc.connectionState}`)
@@ -654,38 +681,6 @@
                 }
             }
 
-            signal.wire = async (message) => {
-                switch (message.t) {
-                    case "ANSWER":
-                        await pc.setRemoteDescription(message.p)
-                        log.rtc(`SDP answer: ${message.p.sdp}`, LOG_REMOTE)
-                        return
-                    case "ICE":
-                        // !to handle TypeError
-                        // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
-                        pc.addIceCandidate(message.p)
-                            .catch(e => log.ice(`Failure during addIceCandidate(): ${e.name}`))
-                        log.ice(`remote ${message.p.candidate}`, LOG_REMOTE)
-                        return
-                    case "LOG":
-                        gui.log(message.p.text, LOG_REMOTE, message.p.tag)
-                        return
-                    case "OFFER":
-                        log.rtc(`SDP offer: ${message.p.sdp}`, LOG_REMOTE)
-                        await pc.setRemoteDescription(message.p)
-                        const answer = await pc.createAnswer()
-                        api.send.webrtc.answer(answer)
-                        log.rtc(`SDP answer: ${answer.sdp}`)
-                        await pc.setLocalDescription(answer)
-                        return
-                    case "CLOSE":
-                        await signal.disconnect()
-                        log.rtc('Stop')
-                        gui.log()
-                        return
-                }
-            }
-
             if (options.webrtc.flip_offer_side) {
                 api.send.webrtc.wait_offer()
             } else {
@@ -697,12 +692,9 @@
             }
         }
         const disconnect = async () => {
-            if (!pc) return
-            if (dc) {
-                dc.close()
-            }
-            pc.close()
-            api.terminate()
+            if (dc) dc.close()
+            if (pc) pc.close()
+            if (signal.active()) api.terminate()
         }
         return {
             connect,
@@ -720,7 +712,14 @@
             URL.revokeObjectURL(a.href);
         };
 
-        const server = webrtc({_api: api, transport: socket({url: `ws://${window.location.host}/websocket`})});
+        const server = webrtc(
+            api,
+            socket({
+                url: new URL(`ws://${window.location.host}/websocket`),
+                onClose: () => document.dispatchEvent(STATE_CLOSE),
+                log: (m) => gui.log(m, LOG_LOCAL, 'WS'),
+            })
+        );
 
         const control = document.getElementById('controls__button');
         let active = false;
@@ -728,20 +727,17 @@
             active = !active
             if (active) {
                 control.textContent = 'Stop'
-                await server.connect({
-                    disable_interceptors: options.webrtc.disable_interceptors,
-                    flip_offer_side: options.webrtc.flip_offer_side,
-                    ice_lite: options.webrtc.ice_lite,
-                    ice_servers: options.webrtc.ice_servers,
-                    log_level: options.webrtc.log_level,
-                    nat1to1: options.webrtc.nat1to1,
-                    test_nat: options.webrtc.test_nat,
-                    port: options.webrtc.port,
-                })
+                await server.connect({...options.webrtc})
             } else {
                 control.textContent = 'Start'
                 await server.disconnect()
             }
+        })
+
+        document.addEventListener(STATE_CLOSE.type, async () => {
+            active = false
+            control.textContent = 'Start'
+            await server.disconnect()
         })
 
         document.getElementById('log_clear')
@@ -766,6 +762,42 @@
                 }
                 downloadToFile(text, 'my-new-file.txt', 'text/plain');
             })
+
+
+        document.getElementById('test-rtc').addEventListener('click', () => {
+            function iceCandidateError(e) {
+                if (e.errorText == 'STUN host lookup received error.')
+                    console.error('WebRTC is being blocked');
+            }
+
+            function gotDescription(desc) {
+                rtc.setLocalDescription(desc);
+            }
+
+            function noDescription(error) {
+                console.error('WebRTC check failed: no description');
+            }
+
+            config =
+                {
+                    iceCandidatePoolSize: "0",
+                    iceServers: [{urls: ["stun:stun.l.google.com:19302"]}],
+                    iceTransportPolicy: "all"
+                }
+
+            const offerOptions = {offerToReceiveAudio: 1};
+
+            rtc = new RTCPeerConnection(config);
+            rtc.onicecandidateerror = iceCandidateError;
+
+            rtc.createOffer(
+                offerOptions
+            ).then(
+                gotDescription,
+                noDescription
+            );
+        })
+
     })()
 </script>
 </html>
