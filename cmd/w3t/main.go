@@ -20,11 +20,12 @@ func main() {
 		log.Fatalf("web content fail, %v", err)
 	}
 
-	http.Handle("/", index)
-	http.Handle("/websocket", signal.Handler())
+	mux := http.NewServeMux()
+	mux.Handle("/", index)
+	mux.Handle("/websocket", signal.Handler())
 
 	log.Printf("Listening on %s...", *addr)
-	if err = http.ListenAndServe(*addr, nil); err != nil {
+	if err = http.ListenAndServe(*addr, mux); err != nil {
 		log.Fatal(err)
 	}
 }
