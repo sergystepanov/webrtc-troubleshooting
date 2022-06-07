@@ -201,7 +201,6 @@
     <div id="connection"></div>
     <div class="controls">
         <button id="controls__button">Start</button>
-        <button id="test-rtc">Test</button>
     </div>
     <div class="opts">
         <div class="opts__header">
@@ -762,42 +761,6 @@
                 }
                 downloadToFile(text, 'my-new-file.txt', 'text/plain');
             })
-
-
-        document.getElementById('test-rtc').addEventListener('click', () => {
-            function iceCandidateError(e) {
-                if (e.errorText == 'STUN host lookup received error.')
-                    console.error('WebRTC is being blocked');
-            }
-
-            function gotDescription(desc) {
-                rtc.setLocalDescription(desc);
-            }
-
-            function noDescription(error) {
-                console.error('WebRTC check failed: no description');
-            }
-
-            config =
-                {
-                    iceCandidatePoolSize: "0",
-                    iceServers: [{urls: ["stun:stun.l.google.com:19302"]}],
-                    iceTransportPolicy: "all"
-                }
-
-            const offerOptions = {offerToReceiveAudio: 1};
-
-            rtc = new RTCPeerConnection(config);
-            rtc.onicecandidateerror = iceCandidateError;
-
-            rtc.createOffer(
-                offerOptions
-            ).then(
-                gotDescription,
-                noDescription
-            );
-        })
-
     })()
 </script>
 </html>
