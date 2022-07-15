@@ -1,26 +1,31 @@
 # syntax=docker/dockerfile:1
 
-##
-## Build
-##
+# build
 FROM golang:1.18-bullseye
+
+# UPX
+ARG UPX_VERSION=3.96
+RUN apt-get update && \
+    apt-get install -y xz-utils && \
+    rm -rf /var/lib/apt/lists/*
+ADD https://github.com/upx/upx/releases/download/v$UPX_VERSION/upx-$UPX_VERSION-amd64_linux.tar.xz /usr/local
+RUN xz -d -c /usr/local/upx-$UPX_VERSION-amd64_linux.tar.xz | \
+    tar -xOf - upx-$UPX_VERSION-amd64_linux/upx > /bin/upx && \
+    chmod a+x /bin/upx
 
 WORKDIR /app
 
-# install dependencies
-# RUN apk add upx
-
-COPY go.mod ./
-COPY go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . ./
-RUN go build -ldflags "-w -s" -o ./build/ ./cmd/w3t
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o ./build/ ./cmd/w3t
+RUN strip --strip-unneeded ./build/w3t && \
+    upx --best --lzma ./build/w3t
 
-##
-## Deploy
-##
-FROM gcr.io/distroless/base-debian11
+# deploy
+FROM gcr.io/distroless/static-debian11
 
 WORKDIR /
 
