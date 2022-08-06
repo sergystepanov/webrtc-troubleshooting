@@ -576,16 +576,13 @@
                     return a
                 }, {})
                 await signal.connect(opts)
-            } catch
-                (e) {
+            } catch (e) {
                 log.rtc(`err: ${e.message}`)
                 return
             }
 
             try {
-                pc = new RTCPeerConnection({
-                    iceServers: (opts.ice_servers || []).map(s => ({urls: s}))
-                })
+                pc = new RTCPeerConnection({iceServers: (opts.ice_servers || []).map(s => ({urls: s}))})
             } catch (e) {
                 log.rtc(`err: ${e.message}`)
                 document.dispatchEvent(STATE_CLOSE)
