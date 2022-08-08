@@ -317,143 +317,262 @@
         terminate: () => wire.send({t: "CLOSE"})
     })
 
-    const LOG_LOCAL = false,
-        LOG_REMOTE = true;
+    const log = (() => {
+        const direction = Object.freeze({
+            LOCAL: false,
+            REMOTE: true,
+        })
+        const events = Object.freeze({
+            NEW_LOG_MESSAGE: new Event('new-log-message'),
+            LOG_AWAIT_REPAINT: new Event('log-await-repaint'),
+            LOG_FULL_CLEAR: new Event('log-full-clear'),
+            LOG_CLEAR: new Event('log-clear'),
+        })
+        const session = (() => {
+            let sessions = [{messages: []}],
+                currentSession = 0
 
-    let options = {
-        log: {
-            show_public_ip: true
-        },
-        webrtc: {
-            disable_interceptors: false,
-            flip_offer_side: false,
-            ice_lite: false,
-            ice_servers: [
-                'stun:stun.nextcloud.com:443',
-                'stun:stun.l.google.com:19302'
-            ],
-            log_level: 4,
-            nat1to1: "",
-            port: "",
-            test_nat: false,
-        },
-    }
-    const defaults = Object.freeze(options)
-
-    const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
-    const optsResetEvent = new Event('opts-reset');
-
-    opts.forEach((opt) => {
-        let listener, valueHolder;
-
-        // opt-tag-option_name_ -> options = { tag : { option_name: default } }
-        const _id = opt.id.replace('opt-', '').split('-')
-        const tag = _id[0], optName = _id[1];
-        let val = defaults[tag][optName],
-            fromValue = (v) => v,
-            toValue = (v) => v
-
-        switch (opt.tagName.toLowerCase()) {
-            case 'input':
-                switch (opt.type) {
-                    case 'checkbox':
-                        listener = 'change'
-                        valueHolder = 'checked'
-                        break;
-                    case 'number':
-                    case 'text':
-                        listener = 'input'
-                        valueHolder = 'value'
-                        break;
+            const clear = (all = false) => {
+                if (all) {
+                    sessions = [{messages: []}]
+                    currentSession = 0
+                    document.dispatchEvent(events.LOG_FULL_CLEAR)
+                    return
                 }
-                break;
-            case 'select':
-                listener = 'change'
-                valueHolder = 'value'
-                break;
-            case 'textarea':
-                fromValue = (v) => v ? v.split('\n') : []
-                toValue = (v) => v ? v.join('\r\n') : ''
-                listener = 'change'
-                valueHolder = 'value'
-                break;
+                sessions[currentSession].messages = []
+                document.dispatchEvent(events.LOG_CLEAR)
+            }
+
+            const add = (message) => sessions[currentSession].messages.push(message)
+
+            const start = () => {
+                sessions[currentSession].startTime = performance.now()
+                sessions.push({startTime: performance.now(), messages: []})
+            }
+            const stop = () => {
+                sessions[currentSession].stopTime = performance.now()
+                currentSession++
+            }
+            const getAll = () => sessions
+
+            return {
+                add,
+                clear,
+                getAll,
+                start,
+                stop,
+            }
+        })()
+
+        const message = (m, dir = direction.LOCAL, name, tag) => {
+            const message = {timestamp: performance.now(), message: m, dir: dir, name: name, tag: tag};
+            session.add(message)
+            document.dispatchEvent(new CustomEvent(events.NEW_LOG_MESSAGE.type, {detail: message}))
         }
 
-        if (listener && valueHolder) {
-            opt.addEventListener(listener, _ => {
-                options[tag][optName] = fromValue(opt[valueHolder])
-                console.table(options)
-            })
-            opt.addEventListener('opts-reset', _ => {
-                options[tag][optName] = val
+        const clear = (all = false) => {
+            session.clear(all)
+            document.dispatchEvent(all ? events.LOG_FULL_CLEAR : events.LOG_CLEAR)
+        }
+
+        const getAll = session.getAll
+
+        return {
+            clear,
+            dir: direction,
+            events,
+            getAll,
+            message,
+            session,
+        }
+    })(document)
+
+    const options = (() => {
+        let options = {
+            log: {
+                show_public_ip: true,
+            },
+            webrtc: {
+                disable_interceptors: false,
+                flip_offer_side: false,
+                ice_lite: false,
+                ice_servers: [
+                    'stun:stun.nextcloud.com:443',
+                    'stun:stun.l.google.com:19302'
+                ],
+                log_level: 4,
+                nat1to1: "",
+                port: "",
+                test_nat: false,
+            },
+        }
+        const defaults = Object.freeze(options)
+
+        const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
+        const optsResetEvent = new Event('opts-reset');
+
+        opts.forEach((opt) => {
+            let listener, valueHolder;
+
+            // opt-tag-option_name_ -> options = { tag : { option_name: default } }
+            const _id = opt.id.replace('opt-', '').split('-')
+            const tag = _id[0], optName = _id[1];
+            let val = defaults[tag][optName],
+                fromValue = (v) => v,
+                toValue = (v) => v
+
+            switch (opt.tagName.toLowerCase()) {
+                case 'input':
+                    switch (opt.type) {
+                        case 'checkbox':
+                            listener = 'change'
+                            valueHolder = 'checked'
+                            break;
+                        case 'number':
+                        case 'text':
+                            listener = 'input'
+                            valueHolder = 'value'
+                            break;
+                    }
+                    break;
+                case 'select':
+                    listener = 'change'
+                    valueHolder = 'value'
+                    break;
+                case 'textarea':
+                    fromValue = (v) => v ? v.split('\n') : []
+                    toValue = (v) => v ? v.join('\r\n') : ''
+                    listener = 'change'
+                    valueHolder = 'value'
+                    break;
+            }
+
+            if (listener && valueHolder) {
+                opt.addEventListener(listener, _ => {
+                    options[tag][optName] = fromValue(opt[valueHolder])
+                    console.table(options)
+                })
+                opt.addEventListener('opts-reset', _ => {
+                    options[tag][optName] = val
+                    opt[valueHolder] = toValue(val)
+                })
                 opt[valueHolder] = toValue(val)
-            })
-            opt[valueHolder] = toValue(val)
-        }
-    })
+            }
+        })
 
-    // opts
-    document.getElementById('opts_reset')
-        .addEventListener('click', _ => opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
+        // opts
+        document.getElementById('opts_reset')
+            .addEventListener('click', _ => opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
+
+        return {
+            log: {
+                switchShowPublicIPs: () => options.log.show_public_ip = !options.log.show_public_ip,
+                showPublicIPs: () => options.log.show_public_ip
+            },
+            webrtc: () => options.webrtc
+        }
+    })()
 
     // time-time
     let startTime, connectTime;
 
     const STATE_CLOSE = new Event('state-close');
 
-    const gui = (() => {
-        const forEl = (id, fn) => {
-            const el = document.getElementById(id)
-            if (el) {
-                fn(el)
+    // render log messages on the page
+    const printer = ((opts, log) => {
+        // transforming
+        const transformPublicIp = (m) => {
+            if (!m) return
+            if (!opts.log.showPublicIPs()) {
+                if (/\d+(?<!10)\.\d+(?<!192\.168)(?<!172\.(1[6-9]|2\d|3[0-1]))\.\d+\.\d+/.test(m)) {
+                    m = '[redacted]'
+                }
             }
+            return m
         }
+        // formatting
+        const pad = (n, z = 2) => ('00' + Math.floor(n)).slice(-z)
+        const renderTimeS = (ms) => `${pad(ms / 60000 % 60)}:${pad(ms / 1000 % 60)}.${pad(ms % 1000, 3)}`;
 
-        [...document.getElementsByClassName('toggle')].forEach(el => {
-            el.addEventListener('click', () => el.classList.toggle('active'))
-        })
+        // 1 page log print (automatic)
+        (() => {
+            const dest = document.getElementById('log_messages')
+            // !to add proper session time
+            const printLogLine = ({message, dir, name, tag}) => {
+                const el = document.createElement('div')
+                el.classList.add(
+                    'log',
+                    message ? dir ? 'log__server' : 'log__client' : 'break',
+                    ...(tag ? [tag] : []),
+                )
+                if (message) {
+                    let time = renderTimeS(performance.now() - startTime)
+                    let i = 0
+                    while (i < time.length && (time[i] === '0' || time[i] === ':')) {
+                        i++;
+                    }
+                    if (i) {
+                        time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
+                    }
 
-        // log
-        forEl('log_hide_ip', (el) => {
-            el.addEventListener('click', _ => options.log.show_public_ip = !options.log.show_public_ip)
-        })
-
-        const dest = document.getElementById('log_messages')
-
-        const fmt_t = (ms) => {
-            const pad = (n, z = 2) => ('00' + Math.floor(n)).slice(-z);
-            return `${pad(ms / 60000 % 60)}:${pad(ms / 1000 % 60)}.${pad(ms % 1000, 3)}`;
-        }
-
-        const log = (message, server = true, tag, cl) => {
-            const el = document.createElement('div')
-            el.classList.add(
-                'log',
-                message ? server ? 'log__server' : 'log__client' : 'break',
-                ...(cl ? [cl] : []),
-            )
-            if (message) {
-                let time = fmt_t(performance.now() - startTime)
-                let i = 0
-                while (i < time.length && (time[i] === '0' || time[i] === ':')) {
-                    i++;
-                }
-                if (i) {
-                    time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
-                }
-                el.innerHTML = `
+                    el.innerHTML = `
                         <div class="log__time">${time}</div>
-                        <div class="log__dir">${server ? 's' : 'c'}</div>
-                        ${tag && `<div class="log__tag">${tag}</div>`}
-                        <div class="log__content">${message}</div>`
+                        <div class="log__dir">${dir ? 's' : 'c'}</div>
+                        ${name && `<div class="log__tag">${name}</div>`}
+                        <div class="log__content">${transformPublicIp(message)}</div>`
+                }
+                dest.appendChild(el)
             }
-            dest.appendChild(el)
-        }
+            document.addEventListener(log.events.LOG_CLEAR.type, () => dest.innerHTML = '')
+            document.addEventListener(log.events.LOG_FULL_CLEAR.type, () => dest.innerHTML = '')
+            document.addEventListener(log.events.LOG_AWAIT_REPAINT.type, () => {
+                dest.innerHTML = ''
+                log.getAll().forEach(session => {
+                    session.messages.forEach(message => {
+                        printLogLine(message)
+                    })
+                })
+            })
+            document.addEventListener(log.events.NEW_LOG_MESSAGE.type, (e) => {
+                const r = {message, dir: server, name: tag, tag: cl} = e.detail;
+                printLogLine(r)
+            })
+        })();
+
+        // 2 file log print (manual)
+        const filePrint = (() => {
+            const downloadToFile = (content, filename, contentType) => {
+                const file = new Blob([content], {type: contentType});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(file);
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            };
+            const getTextFile = () => {
+                let text = ''
+                log.getAll().forEach(session => {
+                    session.messages.forEach(message => {
+                        text += `${Math.floor(message.timestamp)} ` +
+                            `${message.dir ? 's' : 'c'} ` +
+                            `${message.name ? message.name + ' ' : ''}` +
+                            `${transformPublicIp(message.message)}` +
+                            '\r\n';
+                    })
+                })
+                downloadToFile(text, 'my-new-file.txt', 'text/plain');
+            }
+            return {
+                getTextFile
+            }
+        })()
+
         return {
-            log,
-            clear: () => (dest.innerHTML = '')
+            file: {
+                print: filePrint.getTextFile
+            }
         }
-    })()
+    })(options, log);
 
     const socket = ({url, onClose = () => ({}), log = () => ({})}) => (() => {
         let conn, onMessage = () => ({}), finish;
@@ -520,33 +639,33 @@
         }
     })();
 
-    const webrtc = (api, signal) => (() => {
+    const webrtc = (api, signal, logger) => (() => {
         api = api(signal)
 
         let pc, dc;
         const log = {
-            ice: (m, remote = LOG_LOCAL) => gui.log(m, remote, 'ICE'),
-            rtc: (m, remote = LOG_LOCAL, cl) => gui.log(m, remote, 'RTC', cl),
+            ice: (m, where = logger.dir.LOCAL) => logger.message(m, where, 'ICE'),
+            rtc: (m, where = logger.dir.LOCAL, cl) => logger.message(m, where, 'RTC', cl),
         }
 
         signal.onmessage = async (message) => {
             switch (message.t) {
                 case "ANSWER":
                     await pc.setRemoteDescription(message.p)
-                    log.rtc(`SDP answer: ${message.p.sdp}`, LOG_REMOTE)
+                    log.rtc(`SDP answer: ${message.p.sdp}`, logger.dir.REMOTE)
                     return
                 case "ICE":
                     // !to handle TypeError
                     // https://stackoverflow.com/questions/58908081/webrtc-getting-failed-to-execute-addicecandidate-on-rtcpeerconnection-error-on
                     pc.addIceCandidate(message.p)
                         .catch(e => log.ice(`Failure during addIceCandidate(): ${e.name}`))
-                    log.ice(`remote ${message.p.candidate}`, LOG_REMOTE)
+                    log.ice(`remote ${message.p.candidate}`, logger.dir.REMOTE)
                     return
                 case "LOG":
-                    gui.log(message.p.text, LOG_REMOTE, message.p.tag)
+                    logger.message(message.p.text, logger.dir.REMOTE, message.p.tag)
                     return
                 case "OFFER":
-                    log.rtc(`SDP offer: ${message.p.sdp}`, LOG_REMOTE)
+                    log.rtc(`SDP offer: ${message.p.sdp}`, logger.dir.REMOTE)
                     await pc.setRemoteDescription(message.p)
                     const answer = await pc.createAnswer()
                     api.send.webrtc.answer(answer)
@@ -556,13 +675,13 @@
                 case "CLOSE":
                     await signal.disconnect()
                     log.rtc('Stop')
-                    gui.log()
                     return
+                default:
+                    logger.message(`Unknown server message [${message ? message.t : ''}]`, logger.dir.REMOTE, 'sig')
             }
         }
 
-        const connectionInfo = (conn) => {
-            const {address, port, protocol, candidateType} = conn
+        const connectionInfo = ({address, candidateType, port, protocol}) => {
             return `[${candidateType}] ${protocol}://${address ? address : ''}:${port}`
         }
 
@@ -637,20 +756,20 @@
                     const pair = (progress ? '[in-progress] ' : '') +
                         `${connectionInfo(local)} --- ${connectionInfo(remote)} (${elapsed} ms)`
                     text.innerText = pair
-                    log.rtc(`done / ${pair}`, LOG_LOCAL, 'notice')
+                    log.rtc(`done / ${pair}`, logger.dir.LOCAL, 'notice')
                 }
                 frag.append(text)
                 dest.append(frag)
             }
             pc.oniceconnectionstatechange = _ => log.ice(`→ ${pc.iceConnectionState}`)
             pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
-            pc.onsignalingstatechange = _ => gui.log(`→ ${pc.signalingState}`, LOG_LOCAL, 'sig')
+            pc.onsignalingstatechange = _ => logger.message(`→ ${pc.signalingState}`, logger.dir.LOCAL, 'sig')
 
             const bin = (e) => log.rtc(e.data
                 .replaceAll('1', String.fromCharCode(9679))
-                .replaceAll('0', String.fromCharCode(9675)), LOG_REMOTE)
+                .replaceAll('0', String.fromCharCode(9675)), logger.dir.REMOTE)
 
-            if (options.webrtc.flip_offer_side) {
+            if (options.webrtc().flip_offer_side) {
                 pc.ondatachannel = e => {
                     dc = e.channel
                     dc.onmessage = bin
@@ -665,19 +784,14 @@
             pc.onicecandidate = e => {
                 if (!e.candidate) return;
 
-                let {address, candidate} = e.candidate
-                if (!options.log.show_public_ip) {
-                    if (!/(0\.0\.0\.0)|(10\..*\..*\..*)|(172\.(1[6-9]|2\d|3[0-1])\..*\..*)|(192\.168\..*\..*)|([a-z\d.-]+\.local)/.test(address)) {
-                        candidate = candidate.replace(address, '¯ \\ _ (ツ) _ / ¯')
-                    }
-                }
+                const candidate = e.candidate.candidate
                 log.ice(`local ${candidate}`)
                 if (candidate !== "") {
                     api.send.webrtc.ice(e.candidate)
                 }
             }
 
-            if (options.webrtc.flip_offer_side) {
+            if (options.webrtc().flip_offer_side) {
                 api.send.webrtc.wait_offer()
             } else {
                 pc.createOffer().then(offer => {
@@ -699,22 +813,14 @@
     })();
 
     (() => {
-        const downloadToFile = (content, filename, contentType) => {
-            const file = new Blob([content], {type: contentType});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(file);
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(a.href);
-        };
-
         const server = webrtc(
             api,
             socket({
                 url: new URL(`ws://${window.location.host}/websocket`),
                 onClose: () => document.dispatchEvent(STATE_CLOSE),
-                log: (m) => gui.log(m, LOG_LOCAL, 'WS'),
-            })
+                log: (m) => log.message(m, log.dir.LOCAL, 'WS'),
+            }),
+            log,
         );
 
         const control = document.getElementById('controls__button');
@@ -723,41 +829,38 @@
             active = !active
             if (active) {
                 control.textContent = 'Stop'
-                await server.connect({...options.webrtc})
+                await server.connect({...options.webrtc()})
+                log.session.start()
             } else {
                 control.textContent = 'Start'
                 await server.disconnect()
             }
+        });
+
+        [...document.getElementsByClassName('toggle')].forEach(el => {
+            el.addEventListener('click', () => el.classList.toggle('active'))
         })
 
         document.addEventListener(STATE_CLOSE.type, async () => {
             active = false
             control.textContent = 'Start'
             await server.disconnect()
+            log.session.stop()
         })
 
+        // log
+        document.getElementById('log_hide_ip')
+            .addEventListener('click', _ => {
+                options.log.switchShowPublicIPs()
+                document.dispatchEvent(log.events.LOG_AWAIT_REPAINT)
+            })
+
         document.getElementById('log_clear')
-            .addEventListener('click', gui.clear)
+            // !to leave only the last session when live clearing
+            .addEventListener('click', () => active ? log.clear() : log.clear(true))
 
         document.getElementById('log_save')
-            .addEventListener('click', () => {
-                const txt = document.getElementById('log_messages');
-                let text = '';
-                let children = txt.children;
-                for (let i = 0; i < children.length; i++) {
-                    let row = children[i];
-                    let children_ = row.children;
-                    let line = '';
-                    for (let j = 0; j < children_.length; j++) {
-                        let field = children_[j];
-                        line += field.innerText;
-                        line += ' '
-                    }
-                    text += line
-                    text += '\r\n';
-                }
-                downloadToFile(text, 'my-new-file.txt', 'text/plain');
-            })
+            .addEventListener('click', () => printer.file.print())
     })()
 </script>
 </html>
