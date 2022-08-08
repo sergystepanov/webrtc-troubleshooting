@@ -325,42 +325,32 @@
         const events = Object.freeze({
             NEW_LOG_MESSAGE: new Event('new-log-message'),
             LOG_AWAIT_REPAINT: new Event('log-await-repaint'),
-            LOG_FULL_CLEAR: new Event('log-full-clear'),
             LOG_CLEAR: new Event('log-clear'),
         })
         const session = (() => {
             let sessions = [{messages: []}],
-                currentSession = 0
-
-            const clear = (all = false) => {
-                if (all) {
-                    sessions = [{messages: []}]
-                    currentSession = 0
-                    document.dispatchEvent(events.LOG_FULL_CLEAR)
-                    return
-                }
-                sessions[currentSession].messages = []
-                document.dispatchEvent(events.LOG_CLEAR)
-            }
-
-            const add = (message) => sessions[currentSession].messages.push(message)
-
-            const start = () => {
-                sessions[currentSession].startTime = performance.now()
-                sessions.push({startTime: performance.now(), messages: []})
-            }
-            const stop = () => {
-                sessions[currentSession].stopTime = performance.now()
-                currentSession++
-            }
-            const getAll = () => sessions
-
+                idx = -1
             return {
-                add,
-                clear,
-                getAll,
-                start,
-                stop,
+                add: (m) => sessions[idx].messages.push(m),
+                clear: (all = false) => {
+                    if (all) {
+                        sessions = [{messages: []}]
+                        idx = -1
+                    } else {
+                        // [1,2,(3)] -> [(3)]
+                        sessions = sessions.slice(idx)
+                        sessions[idx].messages = []
+                    }
+                    document.dispatchEvent(events.LOG_CLEAR)
+                },
+                current: () => sessions[idx],
+                getAll: () => sessions,
+                start: () => {
+                    idx++
+                    idx > 0 && sessions.push({startTime: performance.now(), messages: []})
+                    sessions[idx].startTime = performance.now()
+                },
+                stop: () => sessions[idx].stopTime = performance.now(),
             }
         })()
 
@@ -372,23 +362,22 @@
 
         const clear = (all = false) => {
             session.clear(all)
-            document.dispatchEvent(all ? events.LOG_FULL_CLEAR : events.LOG_CLEAR)
+            document.dispatchEvent(events.LOG_CLEAR)
         }
-
-        const getAll = session.getAll
 
         return {
             clear,
+            currentSession: session.current,
             dir: direction,
             events,
-            getAll,
+            getAll: session.getAll,
             message,
             session,
         }
     })(document)
 
     const options = (() => {
-        let options = {
+        const options = {
             log: {
                 show_public_ip: true,
             },
@@ -448,10 +437,7 @@
             }
 
             if (listener && valueHolder) {
-                opt.addEventListener(listener, _ => {
-                    options[tag][optName] = fromValue(opt[valueHolder])
-                    console.table(options)
-                })
+                opt.addEventListener(listener, _ => options[tag][optName] = fromValue(opt[valueHolder]))
                 opt.addEventListener('opts-reset', _ => {
                     options[tag][optName] = val
                     opt[valueHolder] = toValue(val)
@@ -473,19 +459,17 @@
         }
     })()
 
-    // time-time
-    let startTime, connectTime;
-
     const STATE_CLOSE = new Event('state-close');
 
     // render log messages on the page
     const printer = ((opts, log) => {
         // transforming
+        const ipv4 = /\d+(?<!10)\.\d+(?<!192\.168)(?<!172\.(1[6-9]|2\d|3[0-1]))\.\d+\.\d+/g
         const transformPublicIp = (m) => {
-            if (!m) return
+            if (!m) return m
             if (!opts.log.showPublicIPs()) {
-                if (/\d+(?<!10)\.\d+(?<!192\.168)(?<!172\.(1[6-9]|2\d|3[0-1]))\.\d+\.\d+/.test(m)) {
-                    m = '[redacted]'
+                for (const match of m.matchAll(ipv4)) {
+                    m = m.replaceAll(match[0], '¯ \\ _ (ツ) _ / ¯')
                 }
             }
             return m
@@ -497,8 +481,7 @@
         // 1 page log print (automatic)
         (() => {
             const dest = document.getElementById('log_messages')
-            // !to add proper session time
-            const printLogLine = ({message, dir, name, tag}) => {
+            const printLogLine = (startTimestamp, {timestamp, message, dir, name, tag}) => {
                 const el = document.createElement('div')
                 el.classList.add(
                     'log',
@@ -506,7 +489,7 @@
                     ...(tag ? [tag] : []),
                 )
                 if (message) {
-                    let time = renderTimeS(performance.now() - startTime)
+                    let time = renderTimeS(timestamp - startTimestamp)
                     let i = 0
                     while (i < time.length && (time[i] === '0' || time[i] === ':')) {
                         i++;
@@ -524,18 +507,17 @@
                 dest.appendChild(el)
             }
             document.addEventListener(log.events.LOG_CLEAR.type, () => dest.innerHTML = '')
-            document.addEventListener(log.events.LOG_FULL_CLEAR.type, () => dest.innerHTML = '')
             document.addEventListener(log.events.LOG_AWAIT_REPAINT.type, () => {
                 dest.innerHTML = ''
                 log.getAll().forEach(session => {
                     session.messages.forEach(message => {
-                        printLogLine(message)
+                        printLogLine(session.startTime, message)
                     })
                 })
             })
             document.addEventListener(log.events.NEW_LOG_MESSAGE.type, (e) => {
                 const r = {message, dir: server, name: tag, tag: cl} = e.detail;
-                printLogLine(r)
+                printLogLine(log.currentSession().startTime, r)
             })
         })();
 
@@ -549,21 +531,21 @@
                 a.click();
                 URL.revokeObjectURL(a.href);
             };
-            const getTextFile = () => {
-                let text = ''
-                log.getAll().forEach(session => {
-                    session.messages.forEach(message => {
-                        text += `${Math.floor(message.timestamp)} ` +
-                            `${message.dir ? 's' : 'c'} ` +
-                            `${message.name ? message.name + ' ' : ''}` +
-                            `${transformPublicIp(message.message)}` +
-                            '\r\n';
-                    })
-                })
-                downloadToFile(text, 'my-new-file.txt', 'text/plain');
-            }
             return {
-                getTextFile
+                getTextFile: (name = 'w3t-log') => {
+                    let text = ''
+                    log.getAll().forEach(session => {
+                        session.messages.forEach(message => {
+                            text += `${Math.floor(message.timestamp - session.startTime)} ` +
+                                `${message.dir ? 's' : 'c'} ` +
+                                `${message.name ? message.name + ' ' : ''}` +
+                                `${transformPublicIp(message.message)}` +
+                                '\r\n';
+                        })
+                        text += '\r\n'
+                    })
+                    downloadToFile(text, name + '.txt', 'text/plain');
+                }
             }
         })()
 
@@ -583,8 +565,6 @@
             1008: 'Policy Violation', 1009: 'Message Too Big', 1010: 'Mandatory Ext.', 1011: 'Internal Error',
             1012: 'Service Restart', 1013: 'Try Again Later', 1014: 'Bad Gateway', 1015: 'TLS handshake',
         }
-
-        const active = () => conn && conn.readyState === 1
 
         const connect = (opts) => new Promise((resolve, reject) => {
             if (opts) url.search = new URLSearchParams(opts).toString()
@@ -629,7 +609,7 @@
 
         // noinspection JSUnusedGlobalSymbols
         return {
-            active,
+            active: () => conn && conn.readyState === 1,
             connect,
             disconnect,
             send: (data) => conn.send(JSON.stringify(data)),
@@ -686,7 +666,7 @@
         }
 
         const connect = async (opts = {}) => {
-            connectTime = startTime = performance.now();
+            const connectTime = performance.now();
             log.rtc('Start')
             try {
                 // remove empty opts
@@ -828,12 +808,13 @@
         control.addEventListener('click', async () => {
             active = !active
             if (active) {
-                control.textContent = 'Stop'
-                await server.connect({...options.webrtc()})
                 log.session.start()
+                await server.connect({...options.webrtc()})
+                control.textContent = 'Stop'
             } else {
-                control.textContent = 'Start'
                 await server.disconnect()
+                log.session.stop()
+                control.textContent = 'Start'
             }
         });
 
@@ -856,8 +837,7 @@
             })
 
         document.getElementById('log_clear')
-            // !to leave only the last session when live clearing
-            .addEventListener('click', () => active ? log.clear() : log.clear(true))
+            .addEventListener('click', () => log.clear(!active))
 
         document.getElementById('log_save')
             .addEventListener('click', () => printer.file.print())
