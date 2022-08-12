@@ -636,6 +636,7 @@
         transport.onmessage = async (message) => {
             switch (message.t) {
                 case "ANSWER":
+                    if (pc.signalingState === 'closed') return
                     await pc.setRemoteDescription(message.p)
                     log.rtc(`SDP answer: ${message.p.sdp}`, logger.dir.REMOTE)
                     return
