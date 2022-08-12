@@ -305,17 +305,10 @@
 </div>
 </body>
 <script async>
-    const api = (wire) => ({
-        send: {
-            webrtc: {
-                answer: (answer) => wire.send({t: "ANSWER", p: answer}),
-                ice: (candidate) => wire.send({t: "ICE", p: candidate}),
-                offer: (offer) => wire.send({t: "OFFER", p: offer}),
-                wait_offer: () => wire.send({t: "WAITING_OFFER"}),
-            }
-        },
-        terminate: () => wire.send({t: "CLOSE"})
-    })
+    const event = (() => ({
+        pub: (event, data) => document.dispatchEvent(data ? new CustomEvent(event.type, {detail: data}) : event),
+        sub: (event, fn) => document.addEventListener(event.type, (e) => fn(e.detail))
+    }))(document);
 
     const log = (() => {
         const direction = Object.freeze({
@@ -341,7 +334,6 @@
                         sessions = sessions.slice(idx)
                         sessions[idx].messages = []
                     }
-                    document.dispatchEvent(events.LOG_CLEAR)
                 },
                 current: () => sessions[idx],
                 getAll: () => sessions,
@@ -357,12 +349,12 @@
         const message = (m, dir = direction.LOCAL, name, tag) => {
             const message = {timestamp: performance.now(), message: m, dir: dir, name: name, tag: tag};
             session.add(message)
-            document.dispatchEvent(new CustomEvent(events.NEW_LOG_MESSAGE.type, {detail: message}))
+            event.pub(events.NEW_LOG_MESSAGE, message)
         }
 
         const clear = (all = false) => {
             session.clear(all)
-            document.dispatchEvent(events.LOG_CLEAR)
+            event.pub(events.LOG_CLEAR)
         }
 
         return {
@@ -374,7 +366,7 @@
             message,
             session,
         }
-    })(document)
+    })(event)
 
     const options = (() => {
         const options = {
@@ -506,8 +498,8 @@
                 }
                 dest.appendChild(el)
             }
-            document.addEventListener(log.events.LOG_CLEAR.type, () => dest.innerHTML = '')
-            document.addEventListener(log.events.LOG_AWAIT_REPAINT.type, () => {
+            event.sub(log.events.LOG_CLEAR, () => dest.innerHTML = '')
+            event.sub(log.events.LOG_AWAIT_REPAINT, () => {
                 dest.innerHTML = ''
                 log.getAll().forEach(session => {
                     session.messages.forEach(message => {
@@ -515,10 +507,7 @@
                     })
                 })
             })
-            document.addEventListener(log.events.NEW_LOG_MESSAGE.type, (e) => {
-                const r = {message, dir: server, name: tag, tag: cl} = e.detail;
-                printLogLine(log.currentSession().startTime, r)
-            })
+            event.sub(log.events.NEW_LOG_MESSAGE, (m) => printLogLine(log.currentSession().startTime, m))
         })();
 
         // 2 file log print (manual)
@@ -619,16 +608,16 @@
         }
     })();
 
-    const webrtc = (api, signal, logger) => (() => {
-        api = api(signal)
+    const webrtc = (api, transport, logger) => (() => {
+        api = api(transport)
 
-        let pc, dc;
         const log = {
             ice: (m, where = logger.dir.LOCAL) => logger.message(m, where, 'ICE'),
             rtc: (m, where = logger.dir.LOCAL, cl) => logger.message(m, where, 'RTC', cl),
         }
+        let pc, dc;
 
-        signal.onmessage = async (message) => {
+        transport.onmessage = async (message) => {
             switch (message.t) {
                 case "ANSWER":
                     await pc.setRemoteDescription(message.p)
@@ -653,7 +642,7 @@
                     await pc.setLocalDescription(answer)
                     return
                 case "CLOSE":
-                    await signal.disconnect()
+                    await transport.disconnect()
                     log.rtc('Stop')
                     return
                 default:
@@ -674,7 +663,7 @@
                     if (v && v !== []) a[k] = v
                     return a
                 }, {})
-                await signal.connect(opts)
+                await transport.connect(opts)
             } catch (e) {
                 log.rtc(`err: ${e.message}`)
                 return
@@ -684,7 +673,7 @@
                 pc = new RTCPeerConnection({iceServers: (opts.ice_servers || []).map(s => ({urls: s}))})
             } catch (e) {
                 log.rtc(`err: ${e.message}`)
-                document.dispatchEvent(STATE_CLOSE)
+                event.pub(STATE_CLOSE)
                 return
             }
 
@@ -784,7 +773,7 @@
         const disconnect = async () => {
             if (dc) dc.close()
             if (pc) pc.close()
-            if (signal.active()) api.terminate()
+            if (transport.active()) api.terminate()
         }
         return {
             connect,
@@ -792,15 +781,26 @@
         }
     })();
 
+    // main
     (() => {
         const server = webrtc(
-            api,
+            (chan) => ({
+                send: {
+                    webrtc: {
+                        answer: (sdp) => chan.send({t: "ANSWER", p: sdp}),
+                        ice: (candidate) => chan.send({t: "ICE", p: candidate}),
+                        offer: (sdp) => chan.send({t: "OFFER", p: sdp}),
+                        wait_offer: () => chan.send({t: "WAITING_OFFER"}),
+                    }
+                },
+                terminate: () => chan.send({t: "CLOSE"})
+            }),
             socket({
                 url: new URL(`ws://${window.location.host}/websocket`),
-                onClose: () => document.dispatchEvent(STATE_CLOSE),
+                onClose: () => event.pub(STATE_CLOSE),
                 log: (m) => log.message(m, log.dir.LOCAL, 'WS'),
             }),
-            log,
+            log
         );
 
         const control = document.getElementById('controls__button');
@@ -822,7 +822,7 @@
             el.addEventListener('click', () => el.classList.toggle('active'))
         })
 
-        document.addEventListener(STATE_CLOSE.type, async () => {
+        event.sub(STATE_CLOSE, async () => {
             active = false
             control.textContent = 'Start'
             await server.disconnect()
@@ -833,7 +833,7 @@
         document.getElementById('log_hide_ip')
             .addEventListener('click', _ => {
                 options.log.switchShowPublicIPs()
-                document.dispatchEvent(log.events.LOG_AWAIT_REPAINT)
+                event.pub(log.events.LOG_AWAIT_REPAINT)
             })
 
         document.getElementById('log_clear')
