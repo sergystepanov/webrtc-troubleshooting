@@ -116,7 +116,7 @@ func Handler() websocket.Handler {
 				return
 			}
 			if err := signal.send(api.NewIce(*c)); err != nil {
-				panic(err)
+				_log("sys", "fail: %v", err)
 			}
 		})
 

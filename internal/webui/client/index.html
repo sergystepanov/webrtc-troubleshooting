@@ -321,28 +321,19 @@
             LOG_CLEAR: new Event('log-clear'),
         })
         const session = (() => {
-            let sessions = [{messages: []}],
-                idx = -1
+            let sessions = []
+            const current = () => sessions[sessions.length - 1]
+            const start = () => {
+                sessions = [];
+                sessions.push({startTime: performance.now(), messages: []})
+            }
             return {
-                add: (m) => sessions[idx].messages.push(m),
-                clear: (all = false) => {
-                    if (all) {
-                        sessions = [{messages: []}]
-                        idx = -1
-                    } else {
-                        // [1,2,(3)] -> [(3)]
-                        sessions = sessions.slice(idx)
-                        sessions[idx].messages = []
-                    }
-                },
-                current: () => sessions[idx],
+                add: (m) => current().messages.push(m),
+                clear: start,
+                current,
                 getAll: () => sessions,
-                start: () => {
-                    idx++
-                    idx > 0 && sessions.push({startTime: performance.now(), messages: []})
-                    sessions[idx].startTime = performance.now()
-                },
-                stop: () => sessions[idx].stopTime = performance.now(),
+                start,
+                stop: () => current().stopTime = performance.now(),
             }
         })()
 
@@ -352,8 +343,8 @@
             event.pub(events.NEW_LOG_MESSAGE, message)
         }
 
-        const clear = (all = false) => {
-            session.clear(all)
+        const clear = () => {
+            session.clear()
             event.pub(events.LOG_CLEAR)
         }
 
