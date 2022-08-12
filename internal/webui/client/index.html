@@ -783,6 +783,12 @@
 
     // main
     (() => {
+        const app = {
+            session: {
+                active: false
+            }
+        };
+
         const server = webrtc(
             (chan) => ({
                 send: {
@@ -804,18 +810,17 @@
         );
 
         const control = document.getElementById('controls__button');
-        let active = false;
         control.addEventListener('click', async () => {
-            active = !active
-            if (active) {
+            app.session.active = !app.session.active
+            if (app.session.active) {
                 log.session.start()
                 await server.connect({...options.webrtc()})
                 control.textContent = 'Stop'
-            } else {
-                await server.disconnect()
-                log.session.stop()
-                control.textContent = 'Start'
+                return
             }
+            await server.disconnect()
+            log.session.stop()
+            control.textContent = 'Start'
         });
 
         [...document.getElementsByClassName('toggle')].forEach(el => {
@@ -823,7 +828,7 @@
         })
 
         event.sub(STATE_CLOSE, async () => {
-            active = false
+            app.session.active = false
             control.textContent = 'Start'
             await server.disconnect()
             log.session.stop()
@@ -837,7 +842,7 @@
             })
 
         document.getElementById('log_clear')
-            .addEventListener('click', () => log.clear(!active))
+            .addEventListener('click', () => log.clear(!app.session.active))
 
         document.getElementById('log_save')
             .addEventListener('click', () => printer.file.print())
