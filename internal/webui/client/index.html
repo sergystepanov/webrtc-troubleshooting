@@ -305,31 +305,27 @@
 </div>
 </body>
 <script async>
-    const event = (() => ({
-        pub: (event, data) => document.dispatchEvent(data ? new CustomEvent(event.type, {detail: data}) : event),
-        sub: (event, fn) => document.addEventListener(event.type, (e) => fn(e.detail))
-    }))(document);
+    const event = ((topics = {}) => ({
+        pub: (name, data) => topics[name] && topics[name](data),
+        sub: (name, listener) => topics[name] = listener
+    }))();
 
     const log = (() => {
-        const direction = Object.freeze({
+        const direction = {
             LOCAL: false,
             REMOTE: true,
-        })
-        const events = Object.freeze({
-            NEW_LOG_MESSAGE: new Event('new-log-message'),
-            LOG_AWAIT_REPAINT: new Event('log-await-repaint'),
-            LOG_CLEAR: new Event('log-clear'),
-        })
+        }
+        const events = {
+            CLEAR: 'log-clear',
+            MESSAGE: 'log-message',
+            REFRESH: 'log-refresh',
+        }
         const session = (() => {
             let sessions = []
             const current = () => sessions[sessions.length - 1]
-            const start = () => {
-                sessions = [];
-                sessions.push({startTime: performance.now(), messages: []})
-            }
+            const start = () => (sessions = []).push({startTime: performance.now(), messages: []})
             return {
                 add: (m) => current().messages.push(m),
-                clear: start,
                 current,
                 getAll: () => sessions,
                 start,
@@ -337,25 +333,22 @@
             }
         })()
 
-        const message = (m, dir = direction.LOCAL, name, tag) => {
-            const message = {timestamp: performance.now(), message: m, dir: dir, name: name, tag: tag};
-            session.add(message)
-            event.pub(events.NEW_LOG_MESSAGE, message)
-        }
-
-        const clear = () => {
-            session.clear()
-            event.pub(events.LOG_CLEAR)
-        }
-
         return {
-            clear,
-            currentSession: session.current,
+            clear: () => {
+                session.start()
+                event.pub(events.CLEAR)
+            },
             dir: direction,
             events,
-            getAll: session.getAll,
-            message,
-            session,
+            getMessages: session.getAll,
+            getStartTime: () => session.current().startTime,
+            message: (message, dir = direction.LOCAL, name, tag) => {
+                const m = {timestamp: performance.now(), ...{message, dir, name, tag}};
+                session.add(m)
+                event.pub(events.MESSAGE, m)
+            },
+            start: () => session.start(),
+            stop: () => session.stop()
         }
     })(event)
 
@@ -378,7 +371,7 @@
                 test_nat: false,
             },
         }
-        const defaults = Object.freeze(options)
+        const defaults = options
 
         const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
         const optsResetEvent = new Event('opts-reset');
@@ -442,8 +435,6 @@
         }
     })()
 
-    const STATE_CLOSE = new Event('state-close');
-
     // render log messages on the page
     const printer = ((opts, log) => {
         // transforming
@@ -463,24 +454,26 @@
 
         // 1 page log print (automatic)
         (() => {
+            const _create = (name, cl) => {
+                const el = document.createElement(name)
+                cl && el.classList.add(cl)
+                return el
+            }
             const dest = document.getElementById('log_messages')
 
+            const _parent = _create('div')
+            const _time = _create('div', 'log__time')
+            _time.append(_create('span', 'grayed'), _create('span'))
+
             const _logLine = document.createDocumentFragment()
-            let _el = document.createElement('div')
-            _el.classList.add('log__time');
-            _logLine.append(_el)
-            _el = document.createElement('div')
-            _el.classList.add('log__dir')
-            _logLine.append(_el)
-            _el = document.createElement('div')
-            _el.classList.add('log__tag')
-            _logLine.append(_el)
-            _el = document.createElement('div')
-            _el.classList.add('log__content')
-            _logLine.append(_el)
+            _logLine.append(
+                _time,
+                _create('div', 'log__dir'),
+                _create('div', 'log__tag'),
+                _create('div', 'log__content'))
 
             const printLogLine = (startTimestamp, {timestamp, message, dir, name, tag}) => {
-                const el = document.createElement('div')
+                const el = _parent.cloneNode()
                 el.classList.add(
                     'log',
                     message ? dir ? 'log__server' : 'log__client' : 'break',
@@ -493,28 +486,30 @@
                         i++;
                     }
                     if (i) {
-                        time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
+                        _logLine.children[0].children[0].textContent = time.slice(0, i)
+                        time = time.slice(i)
                     }
-
-                    _logLine.children[0].innerHTML = time
+                    _logLine.children[0].children[1].textContent = time
                     _logLine.children[1].textContent = dir ? 's' : 'c'
                     _logLine.children[2].textContent = name
                     _logLine.children[3].textContent = transformPublicIp(message)
 
                     el.appendChild(_logLine.cloneNode(true))
                 }
-                dest.appendChild(el)
+                return el
             }
-            event.sub(log.events.LOG_CLEAR, () => dest.innerHTML = '')
-            event.sub(log.events.LOG_AWAIT_REPAINT, () => {
-                dest.innerHTML = ''
-                log.getAll().forEach(session => {
+            event.sub(log.events.CLEAR, () => dest.innerHTML = '')
+            event.sub(log.events.REFRESH, () => {
+                const yolo = document.createDocumentFragment()
+                log.getMessages().forEach(session => {
                     session.messages.forEach(message => {
-                        printLogLine(session.startTime, message)
+                        yolo.append(printLogLine(session.startTime, message))
                     })
                 })
+                dest.innerHTML = ''
+                dest.append(yolo)
             })
-            event.sub(log.events.NEW_LOG_MESSAGE, (m) => printLogLine(log.currentSession().startTime, m))
+            event.sub(log.events.MESSAGE, (m) => dest.append(printLogLine(log.getStartTime(), m)))
         })();
 
         // 2 file log print (manual)
@@ -530,7 +525,7 @@
             return {
                 getTextFile: (name = 'w3t-log') => {
                     let text = ''
-                    log.getAll().forEach(session => {
+                    log.getMessages().forEach(session => {
                         session.messages.forEach(message => {
                             text += `${Math.floor(message.timestamp - session.startTime)} ` +
                                 `${message.dir ? 's' : 'c'} ` +
@@ -552,8 +547,8 @@
         }
     })(options, log);
 
-    const socket = ({url, onClose = () => ({}), log = () => ({})}) => (() => {
-        let conn, onMessage = () => ({}), finish;
+    const socket = ({url, log = () => ({})}) => (() => {
+        let conn, onMessage = () => ({}), onClose = () => ({}), finish;
 
         const closeCodes = {
             1000: 'Normal Closure', 1001: 'Going Away', 1002: 'Protocol error', 1003: 'Unsupported Data',
@@ -561,6 +556,7 @@
             1008: 'Policy Violation', 1009: 'Message Too Big', 1010: 'Mandatory Ext.', 1011: 'Internal Error',
             1012: 'Service Restart', 1013: 'Try Again Later', 1014: 'Bad Gateway', 1015: 'TLS handshake',
         }
+        const isOpen = () => conn.readyState === 1
 
         const connect = (opts) => new Promise((resolve, reject) => {
             if (opts) url.search = new URLSearchParams(opts).toString()
@@ -599,18 +595,19 @@
                 return
             }
             finish = resolve
-            if (conn.readyState === 1) {
-                conn.close()
-            }
+            isOpen() && conn.close()
             conn = null
         })
 
         // noinspection JSUnusedGlobalSymbols
         return {
-            active: () => conn && conn.readyState === 1,
+            active: () => conn && isOpen(),
             connect,
             disconnect,
             send: (data) => conn && conn.send(JSON.stringify(data)),
+            set onclose(handler) {
+                onClose = handler
+            },
             set onmessage(handler) {
                 onMessage = handler
             },
@@ -620,11 +617,17 @@
     const webrtc = (api, transport, logger) => (() => {
         api = api(transport)
 
+        const events = {
+            TRANSPORT_CLOSED: 'webrtc-transport-closed'
+        }
+
         const log = {
             ice: (m, where = logger.dir.LOCAL) => logger.message(m, where, 'ICE'),
             rtc: (m, where = logger.dir.LOCAL, cl) => logger.message(m, where, 'RTC', cl),
         }
         let pc, dc;
+
+        transport.onclose = () => event.pub(events.TRANSPORT_CLOSED)
 
         transport.onmessage = async (message) => {
             switch (message.t) {
@@ -683,7 +686,7 @@
                 pc = new RTCPeerConnection({iceServers: (opts.ice_servers || []).map(s => ({urls: s}))})
             } catch (e) {
                 log.rtc(`err: ${e.message}`)
-                event.pub(STATE_CLOSE)
+                event.pub(events.TRANSPORT_CLOSED)
                 return
             }
 
@@ -788,6 +791,7 @@
         return {
             connect,
             disconnect,
+            events,
         }
     })();
 
@@ -813,7 +817,6 @@
             }),
             socket({
                 url: new URL(`ws://${window.location.host}/websocket`),
-                onClose: () => event.pub(STATE_CLOSE),
                 log: (m) => log.message(m, log.dir.LOCAL, 'WS'),
             }),
             log
@@ -823,13 +826,13 @@
         control.addEventListener('click', async () => {
             app.session.active = !app.session.active
             if (app.session.active) {
-                log.session.start()
+                log.start()
                 await server.connect({...options.webrtc()})
                 control.textContent = 'Stop'
                 return
             }
             await server.disconnect()
-            log.session.stop()
+            log.stop()
             control.textContent = 'Start'
         });
 
@@ -837,22 +840,22 @@
             el.addEventListener('click', () => el.classList.toggle('active'))
         })
 
-        event.sub(STATE_CLOSE, async () => {
+        event.sub(server.events.TRANSPORT_CLOSED, async () => {
             app.session.active = false
             control.textContent = 'Start'
             await server.disconnect()
-            log.session.stop()
+            log.stop()
         })
 
         // log
         document.getElementById('log_hide_ip')
             .addEventListener('click', _ => {
                 options.log.switchShowPublicIPs()
-                event.pub(log.events.LOG_AWAIT_REPAINT)
+                event.pub(log.events.REFRESH)
             })
 
         document.getElementById('log_clear')
-            .addEventListener('click', () => log.clear(!app.session.active))
+            .addEventListener('click', () => log.clear())
 
         document.getElementById('log_save')
             .addEventListener('click', () => printer.file.print())
