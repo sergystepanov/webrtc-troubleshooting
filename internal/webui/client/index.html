@@ -599,7 +599,9 @@
                 return
             }
             finish = resolve
-            conn.close()
+            if (conn.readyState === 1) {
+                conn.close()
+            }
             conn = null
         })
 
@@ -608,7 +610,7 @@
             active: () => conn && conn.readyState === 1,
             connect,
             disconnect,
-            send: (data) => conn.send(JSON.stringify(data)),
+            send: (data) => conn && conn.send(JSON.stringify(data)),
             set onmessage(handler) {
                 onMessage = handler
             },
