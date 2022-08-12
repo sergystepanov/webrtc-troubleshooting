@@ -473,6 +473,21 @@
         // 1 page log print (automatic)
         (() => {
             const dest = document.getElementById('log_messages')
+
+            const _logLine = document.createDocumentFragment()
+            let _el = document.createElement('div')
+            _el.classList.add('log__time');
+            _logLine.append(_el)
+            _el = document.createElement('div')
+            _el.classList.add('log__dir')
+            _logLine.append(_el)
+            _el = document.createElement('div')
+            _el.classList.add('log__tag')
+            _logLine.append(_el)
+            _el = document.createElement('div')
+            _el.classList.add('log__content')
+            _logLine.append(_el)
+
             const printLogLine = (startTimestamp, {timestamp, message, dir, name, tag}) => {
                 const el = document.createElement('div')
                 el.classList.add(
@@ -490,11 +505,12 @@
                         time = `<span class="grayed">${time.slice(0, i) + "</span>" + time.slice(i)}`
                     }
 
-                    el.innerHTML = `
-                        <div class="log__time">${time}</div>
-                        <div class="log__dir">${dir ? 's' : 'c'}</div>
-                        ${name && `<div class="log__tag">${name}</div>`}
-                        <div class="log__content">${transformPublicIp(message)}</div>`
+                    _logLine.children[0].innerHTML = time
+                    _logLine.children[1].textContent = dir ? 's' : 'c'
+                    _logLine.children[2].textContent = name
+                    _logLine.children[3].textContent = transformPublicIp(message)
+
+                    el.appendChild(_logLine.cloneNode(true))
                 }
                 dest.appendChild(el)
             }
