@@ -431,11 +431,12 @@
     // render log messages on the page
     const printer = ((opts, log) => {
         // transforming
-        const ipv4 = /\d+(?<!10)\.\d+(?<!192\.168)(?<!172\.(1[6-9]|2\d|3[0-1]))\.\d+\.\d+/g
+        const ipv4 = /\d+(?<!0|10|127)\.\d+(?<!192\.168)(?<!172\.(1[6-9]|2\d|3[0-1]))\.\d+\.\d+/g
         const transformPublicIp = (m) => {
             if (!m) return m
             if (!opts.log.showPublicIPs()) {
                 for (const match of m.matchAll(ipv4)) {
+                    if ([])
                     m = m.replaceAll(match[0], '¯ \\ _ (ツ) _ / ¯')
                 }
             }
