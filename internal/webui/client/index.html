@@ -305,50 +305,43 @@
 </div>
 </body>
 <script async>
-    const event = ((topics = {}) => ({
-        pub: (name, data) => topics[name] && topics[name](data),
-        sub: (name, listener) => topics[name] = listener
+    const event = ((ev = {}) => ({
+        pub: (name, data) => ev[name] && ev[name](data),
+        fub: (fn, name, data) => {
+            fn(data);
+            ev[name] && ev[name](data)
+        },
+        sub: (name, fn) => ev[name] = fn
     }))();
 
     const log = (() => {
-        const direction = {
-            LOCAL: false,
-            REMOTE: true,
-        }
+        const direction = {LOCAL: false, REMOTE: true}
         const events = {
             CLEAR: 'log-clear',
             MESSAGE: 'log-message',
             REFRESH: 'log-refresh',
         }
-        const session = (() => {
-            let sessions = []
-            const current = () => sessions[sessions.length - 1]
-            const start = () => (sessions = []).push({startTime: performance.now(), messages: []})
+        const session = ((store = []) => {
+            const current = () => store[store.length - 1]
             return {
                 add: (m) => current().messages.push(m),
                 current,
-                getAll: () => sessions,
-                start,
+                records: () => store,
+                start: () => (store = []).push({startTime: performance.now(), messages: []}),
                 stop: () => current().stopTime = performance.now(),
             }
-        })()
+        })(performance)
 
         return {
-            clear: () => {
-                session.start()
-                event.pub(events.CLEAR)
-            },
+            clear: () => event.fub(session.start, events.CLEAR),
             dir: direction,
             events,
-            getMessages: session.getAll,
+            getMessages: () => session.records(),
             getStartTime: () => session.current().startTime,
-            message: (message, dir = direction.LOCAL, name, tag) => {
-                const m = {timestamp: performance.now(), ...{message, dir, name, tag}};
-                session.add(m)
-                event.pub(events.MESSAGE, m)
-            },
-            start: () => session.start(),
-            stop: () => session.stop()
+            message: (message, dir = direction.LOCAL, name, tag) =>
+                event.fub(session.add, events.MESSAGE, {timestamp: performance.now(), ...{message, dir, name, tag}}),
+            start: session.start,
+            stop: session.stop
         }
     })(event)
 
