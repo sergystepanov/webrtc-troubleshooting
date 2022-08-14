@@ -321,6 +321,16 @@
         sub: (name, fn) => ev[name] = fn
     }))();
 
+    const gui = (() => {
+        return {
+            on: (id, ls, fn, event = 'click') => {
+                const el = document.getElementById(id)
+                fn && fn(el)
+                el.addEventListener(event, ls)
+            }
+        }
+    })();
+
     const log = (() => {
         const direction = {LOCAL: false, REMOTE: true}
         const events = {
@@ -424,8 +434,7 @@
         })
 
         // opts
-        document.getElementById('opts_reset')
-            .addEventListener('click', _ => opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
+        gui.on('opts_reset', _ => opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
 
         return {
             log: {
@@ -618,7 +627,8 @@
         api = api(transport)
 
         const events = {
-            TRANSPORT_CLOSED: 'webrtc-transport-closed'
+            CONNECTION_CLOSED: 'webrtc-connection-closed',
+            CONNECTION_OPENED: 'webrtc-connection-opened'
         }
 
         const log = {
@@ -627,7 +637,7 @@
         }
         let pc, dc;
 
-        transport.onclose = () => event.pub(events.TRANSPORT_CLOSED)
+        transport.onclose = () => event.pub(events.CONNECTION_CLOSED)
 
         transport.onmessage = async (message) => {
             switch (message.t) {
@@ -686,7 +696,7 @@
                 pc = new RTCPeerConnection({iceServers: (opts.ice_servers || []).map(s => ({urls: s}))})
             } catch (e) {
                 log.rtc(`err: ${e.message}`)
-                event.pub(events.TRANSPORT_CLOSED)
+                event.pub(events.CONNECTION_CLOSED)
                 return
             }
 
@@ -822,43 +832,39 @@
             log
         );
 
-        const control = document.getElementById('controls__button');
-        control.addEventListener('click', async () => {
-            app.session.active = !app.session.active
-            if (app.session.active) {
-                log.start()
-                await server.connect({...options.webrtc()})
-                control.textContent = 'Stop'
-                return
-            }
+        event.sub(server.events.CONNECTION_OPENED, async () => {
+            app.session.active = true
+            log.start()
+            await server.connect({...options.webrtc()})
+        })
+
+        event.sub(server.events.CONNECTION_CLOSED, async () => {
+            app.session.active = false
             await server.disconnect()
             log.stop()
-            control.textContent = 'Start'
-        });
+            event.pub(server.events.CONNECTION_CLOSED + 'control')
+        })
+
+        gui.on('controls__button',
+            (ev) => {
+                if (!app.session.active) ev.target.textContent = 'Stop'
+                event.pub(app.session.active ? server.events.CONNECTION_CLOSED : server.events.CONNECTION_OPENED)
+            },
+            // in case of abnormal closure
+            (el) => event.sub(server.events.CONNECTION_CLOSED + 'control', () => el.textContent = 'Start'),
+        );
 
         [...document.getElementsByClassName('toggle')].forEach(el => {
             el.addEventListener('click', () => el.classList.toggle('active'))
         })
 
-        event.sub(server.events.TRANSPORT_CLOSED, async () => {
-            app.session.active = false
-            control.textContent = 'Start'
-            await server.disconnect()
-            log.stop()
-        })
-
         // log
-        document.getElementById('log_hide_ip')
-            .addEventListener('click', _ => {
-                options.log.switchShowPublicIPs()
-                event.pub(log.events.REFRESH)
-            })
-
-        document.getElementById('log_clear')
-            .addEventListener('click', () => log.clear())
-
-        document.getElementById('log_save')
-            .addEventListener('click', () => printer.file.print())
+        gui.on('log_hide_ip', _ => {
+            options.log.switchShowPublicIPs()
+            event.pub(log.events.REFRESH)
+        })
+        gui.on('log_clear', () => log.clear())
+        gui.on('log_save', () => printer.file.print())
     })()
 </script>
 </html>
