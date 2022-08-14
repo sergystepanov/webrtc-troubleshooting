@@ -121,6 +121,7 @@
 
         .controls {
             display: flex;
+            gap: 1em;
             position: sticky;
             top: 0;
             background: white;
@@ -129,6 +130,10 @@
             justify-content: center;
 
             z-index: 1;
+        }
+
+        #controls__button {
+            width: 5em;
         }
 
         button {
@@ -176,7 +181,21 @@
             gap: 10px;
         }
 
-        .logging__header__controls, .opts__header__controls {
+        .logging__header__controls {
+            border-top: 1px solid black;
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
+
+            padding: 0;
+        }
+
+        .logging__header__controls legend {
+            text-align: center;
+            font-size: 70%;
+        }
+
+        .opts__header__controls {
             display: flex;
             gap: 6px;
         }
@@ -197,6 +216,10 @@
             height: 6px;
         }
 
+        .log.notice > .log__content {
+            font-weight: bold;
+        }
+
         .opts__header, .logging__header {
             margin-bottom: .33em;
         }
@@ -205,8 +228,13 @@
 <body>
 <div class="container">
     <header>WebRTC Testing & Troubleshooting Tool</header>
-    <div id="connection"></div>
     <div class="controls">
+        <fieldset class="logging__header__controls">
+            <legend>Log</legend>
+            <button id="log_save" class="small">Save</button>
+            <button id="log_hide_ip" class="toggle small">Hide public IP</button>
+            <button id="log_clear" class="small">Clear</button>
+        </fieldset>
         <button id="controls__button">Start</button>
     </div>
     <div class="opts">
@@ -293,11 +321,6 @@
     <div class="logging">
         <div class="logging__header">
             <h4>Log</h4>
-            <div class="logging__header__controls">
-                <button id="log_save" class="small">Save</button>
-                <button id="log_hide_ip" class="toggle small">Hide public IP</button>
-                <button id="log_clear" class="small">Clear</button>
-            </div>
         </div>
         <div>
             <div class="log cap">
@@ -323,6 +346,11 @@
 
     const gui = (() => {
         return {
+            create: (name, cl) => {
+                const el = document.createElement(name)
+                cl && el.classList.add(cl)
+                return el
+            },
             on: (id, ls, fn, event = 'click') => {
                 const el = document.getElementById(id)
                 fn && fn(el)
@@ -463,23 +491,18 @@
 
         // 1 page log print (automatic)
         (() => {
-            const _create = (name, cl) => {
-                const el = document.createElement(name)
-                cl && el.classList.add(cl)
-                return el
-            }
             const dest = document.getElementById('log_messages')
 
-            const _parent = _create('div')
-            const _time = _create('div', 'log__time')
-            _time.append(_create('span', 'grayed'), _create('span'))
+            const _parent = gui.create('div')
+            const _time = gui.create('div', 'log__time')
+            _time.append(gui.create('span', 'grayed'), gui.create('span'))
 
             const _logLine = document.createDocumentFragment()
             _logLine.append(
                 _time,
-                _create('div', 'log__dir'),
-                _create('div', 'log__tag'),
-                _create('div', 'log__content'))
+                gui.create('div', 'log__dir'),
+                gui.create('div', 'log__tag'),
+                gui.create('div', 'log__content'))
 
             const printLogLine = (startTimestamp, {timestamp, message, dir, name, tag}) => {
                 const el = _parent.cloneNode()
@@ -736,22 +759,14 @@
                             break;
                     }
                 }
-                const dest = document.getElementById('connection')
-                const frag = document.createDocumentFragment()
-                const text = document.createElement('div')
-                text.classList.add('connection__pair')
                 if (!local || !remote) {
-                    text.innerText = `no pair );`
                     log.rtc(`no pair!`)
                 } else {
                     const elapsed = Math.floor(performance.now() - connectTime)
                     const pair = (progress ? '[in-progress] ' : '') +
                         `${connectionInfo(local)} --- ${connectionInfo(remote)} (${elapsed} ms)`
-                    text.innerText = pair
                     log.rtc(`done / ${pair}`, logger.dir.LOCAL, 'notice')
                 }
-                frag.append(text)
-                dest.append(frag)
             }
             pc.oniceconnectionstatechange = _ => log.ice(`→ ${pc.iceConnectionState}`)
             pc.onicegatheringstatechange = e => log.ice(`→ ${e.target.iceGatheringState}`)
