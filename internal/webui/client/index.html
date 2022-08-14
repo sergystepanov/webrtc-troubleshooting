@@ -43,28 +43,34 @@
             font-size: smaller;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log__tag, .log__time, .log__dir {
             align-self: normal;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log__tag {
             text-transform: uppercase;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log__tag, .log__dir {
             font-family: monospace;
             font-size: initial !important;
             color: #4299e1;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log__client .log__tag {
             color: #e18a42;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log__client .log__dir {
             color: white;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log__content {
             flex: 1;
             white-space: break-spaces;
@@ -75,6 +81,7 @@
             margin: 0.3em 0;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .grayed {
             color: rgba(0, 0, 0, .4);
         }
@@ -321,22 +328,23 @@
             MESSAGE: 'log-message',
             REFRESH: 'log-refresh',
         }
-        const session = ((store = []) => {
+        const session = ((store) => {
             const current = () => store[store.length - 1]
             return {
                 add: (m) => current().messages.push(m),
                 current,
-                records: () => store,
-                start: () => (store = []).push({startTime: performance.now(), messages: []}),
+                clear: () => store = [],
+                store: () => store,
+                start: () => store.push({startTime: performance.now(), messages: []}),
                 stop: () => current().stopTime = performance.now(),
             }
-        })(performance)
+        })([], performance)
 
         return {
-            clear: () => event.fub(session.start, events.CLEAR),
+            clear: () => event.fub(session.clear, events.CLEAR),
             dir: direction,
             events,
-            getMessages: () => session.records(),
+            getMessages: session.store,
             getStartTime: () => session.current().startTime,
             message: (message, dir = direction.LOCAL, name, tag) =>
                 event.fub(session.add, events.MESSAGE, {timestamp: performance.now(), ...{message, dir, name, tag}}),
@@ -430,13 +438,11 @@
 
     // render log messages on the page
     const printer = ((opts, log) => {
-        // transforming
         const ipv4 = /\d+(?<!0|10|127)\.\d+(?<!192\.168)(?<!172\.(1[6-9]|2\d|3[0-1]))\.\d+\.\d+/g
         const transformPublicIp = (m) => {
             if (!m) return m
             if (!opts.log.showPublicIPs()) {
                 for (const match of m.matchAll(ipv4)) {
-                    if ([])
                     m = m.replaceAll(match[0], '¯ \\ _ (ツ) _ / ¯')
                 }
             }
