@@ -216,6 +216,7 @@
             height: 6px;
         }
 
+        /*noinspection CssUnusedSymbol*/
         .log.notice > .log__content {
             font-weight: bold;
         }
@@ -368,12 +369,13 @@
         }
         const session = ((store) => {
             const current = () => store[store.length - 1]
+            const new_ = {startTime: performance.now(), messages: []}
             return {
                 add: (m) => current().messages.push(m),
                 current,
-                clear: () => store = [],
+                clear: () => (store = []).push(new_),
                 store: () => store,
-                start: () => store.push({startTime: performance.now(), messages: []}),
+                start: () => store.push(new_),
                 stop: () => current().stopTime = performance.now(),
             }
         })([], performance)
@@ -410,21 +412,18 @@
                 test_nat: false,
             },
         }
-        const defaults = options
+        const defaults = JSON.parse(JSON.stringify(options))
 
         const opts = [...document.querySelectorAll('input[id^="opt-"],select[id^="opt-"],textarea[id^="opt-"]')]
-        const optsResetEvent = new Event('opts-reset');
+        // opt-tag-option_name_ -> options = { tag : { option_name: default } }
+        const defaultMut = (v) => v
+        const getMetadata = (opt) => {
+            const id = opt.id.replace('opt-', '').split('-')
 
-        opts.forEach((opt) => {
+            let fromValue = defaultMut,
+                toValue = defaultMut
+
             let listener, valueHolder;
-
-            // opt-tag-option_name_ -> options = { tag : { option_name: default } }
-            const _id = opt.id.replace('opt-', '').split('-')
-            const tag = _id[0], optName = _id[1];
-            let val = defaults[tag][optName],
-                fromValue = (v) => v,
-                toValue = (v) => v
-
             switch (opt.tagName.toLowerCase()) {
                 case 'input':
                     switch (opt.type) {
@@ -450,19 +449,23 @@
                     valueHolder = 'value'
                     break;
             }
+            return {fromValue, toValue, listener, valueHolder, tag: id[0], name: id[1]}
+        }
 
+        opts.forEach((opt) => {
+            const {fromValue, toValue, listener, valueHolder, tag, name} = getMetadata(opt)
             if (listener && valueHolder) {
-                opt.addEventListener(listener, _ => options[tag][optName] = fromValue(opt[valueHolder]))
-                opt.addEventListener('opts-reset', _ => {
-                    options[tag][optName] = val
-                    opt[valueHolder] = toValue(val)
-                })
-                opt[valueHolder] = toValue(val)
+                opt.addEventListener(listener, _ => options[tag][name] = fromValue(opt[valueHolder]))
+                opt[valueHolder] = toValue(defaults[tag][name])
             }
         })
 
         // opts
-        gui.on('opts_reset', _ => opts.forEach((opt) => opt.dispatchEvent(optsResetEvent)))
+        gui.on('opts_reset', _ => opts.forEach((opt) => {
+            const {toValue, valueHolder, tag, name} = getMetadata(opt)
+            options[tag][name] = defaults[tag][name]
+            opt[valueHolder] = toValue(defaults[tag][name])
+        }))
 
         return {
             log: {
