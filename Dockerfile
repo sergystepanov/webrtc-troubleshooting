@@ -1,7 +1,4 @@
-# syntax=docker/dockerfile:1
-
-# build
-FROM golang:1.18-bullseye
+FROM golang:1.20-bullseye
 
 # UPX
 ARG UPX_VERSION=3.96
