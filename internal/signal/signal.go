@@ -88,10 +88,12 @@ func Handler() websocket.Handler {
 		port := q.Get("port")
 		testNat := q.Get("test_nat") == "true"
 		nat1to1 := q.Get("nat1to1")
+		ssl := q.Get("ssl") == "true"
 
 		_log := remoteLogger(&signal)
 		logger := webrtc.NewLoggerFactory(logLevel, _log)
 		_log("sys", "log level is %v", logger.Level)
+		_log("sys", "secure? %v", ssl)
 
 		if testNat {
 			stun.Main(logger.NewLogger("stun"))

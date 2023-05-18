@@ -410,6 +410,7 @@
                 nat1to1: "",
                 port: "",
                 test_nat: false,
+                ssl: location.protocol === 'https:'
             },
         }
         const defaults = JSON.parse(JSON.stringify(options))
@@ -619,7 +620,9 @@
                 onClose()
             }
             conn.onerror = ev => {
-                log(`→ fail${ev.message ? `: ${ev.message}` : ''}`)
+                const details = conn.readyState === 3 ? " couldn't connect" :
+                    ev.message ? `: ${ev.message}` : ''
+                log(`→ fail${details}`)
                 reject(ev)
             }
         })
@@ -844,7 +847,12 @@
                 terminate: () => chan.send({t: "CLOSE"})
             }),
             socket({
-                url: new URL(`ws://${window.location.host}/websocket`),
+                url: (() => {
+                    const url = new URL(window.location);
+                    url.protocol = location.protocol !== 'https:' ? 'wss' : 'wss';
+                    url.pathname = "/websocket";
+                    return url
+                })(),
                 log: (m) => log.message(m, log.dir.LOCAL, 'WS'),
             }),
             log
