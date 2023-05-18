@@ -99,6 +99,12 @@ func Handler() websocket.Handler {
 			stun.Main(logger.NewLogger("stun"))
 		}
 
+		defer func() {
+			// !to wait for message drain
+			done <- struct{}{}
+			signal.close()
+		}()
+
 		p2p, err := webrtc.NewPeerConnection(iceServers, disableInterceptors, port, nat1to1, logger)
 		if err != nil {
 			_log("sys", "fail: %v", err)
@@ -108,7 +114,8 @@ func Handler() websocket.Handler {
 		if flip {
 			dc, err := p2p.CreateDataChannel("data")
 			if err != nil {
-				panic(err)
+				_log("sys", "datachannel fail: %v", err)
+				return
 			}
 			dc.OnOpen(sendGarbage(dc, done))
 		}
@@ -128,12 +135,6 @@ func Handler() websocket.Handler {
 		p2p.OnSignalingStateChange(logState[webrtc.SignalingState]("sig", _log))
 
 		p2p.OnDataChannel(func(d *webrtc.DataChannel) { d.OnOpen(sendGarbage(d, done)) })
-
-		defer func() {
-			// !to wait for message drain
-			done <- struct{}{}
-			signal.close()
-		}()
 
 		for {
 			var m api.Message

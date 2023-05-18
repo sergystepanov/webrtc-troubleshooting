@@ -59,7 +59,7 @@ func DefaultConnection(conf Config) (*Connection, error) {
 	if conf.DtlsRole > 0 {
 		log.Debugf("A custom DTLS role [%v]", conf.DtlsRole)
 		if err := se.SetAnsweringDTLSRole(webrtc.DTLSRole(conf.DtlsRole)); err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 	if conf.IceLite {
@@ -67,13 +67,13 @@ func DefaultConnection(conf Config) (*Connection, error) {
 	}
 	if conf.IcePortMin > 0 && conf.IcePortMax > 0 {
 		if err := se.SetEphemeralUDPPortRange(uint16(conf.IcePortMin), uint16(conf.IcePortMax)); err != nil {
-			panic(err)
+			return nil, err
 		}
 	} else {
 		if conf.SinglePort > 0 {
 			udpListener, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: conf.SinglePort})
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			udpConn = udpListener
 			log.Debugf("Listening for WebRTC traffic at %s", udpListener.LocalAddr())
