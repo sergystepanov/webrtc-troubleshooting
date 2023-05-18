@@ -849,7 +849,7 @@
             socket({
                 url: (() => {
                     const url = new URL(window.location);
-                    url.protocol = location.protocol !== 'https:' ? 'wss' : 'wss';
+                    url.protocol = location.protocol !== 'https:' ? 'ws' : 'wss';
                     url.pathname = "/websocket";
                     return url
                 })(),
