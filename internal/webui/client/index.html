@@ -314,7 +314,9 @@
                     1:1 NAT maps an external IPv4 address to one internal IPv4 address (usually private). All
                     traffic originating from that private IPv4 address
                     going to the Internet will be mapped by 1:1 NAT to the public IPv4 address defined in the entry,
-                    overriding the Outbound NAT configuration
+                    overriding the Outbound NAT configuration.
+                    Format: x.x.x.x/type, (types: host, srflx, prflx, relay).
+                    Example: 128.0.0.1/host
                 </div>
             </div>
         </div>
