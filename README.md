@@ -2,7 +2,7 @@
 
 A simple tool for troubleshooting WebRTC issues.
 
-This utility contains a web server application designed for convenient debugging of problems with WebRTC connections.
+This utility contains a web server application designed for convenient debugging of problems with Pion WebRTC connections.
 
 ### Use
 
