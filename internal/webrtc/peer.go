@@ -21,6 +21,7 @@ type (
 	}
 	Config struct {
 		DisableDefaultInterceptors bool
+		DisableMDNS                bool
 		DtlsRole                   int
 		IceLite                    bool
 		IcePortMin                 int
@@ -54,6 +55,13 @@ func DefaultConnection(conf Config) (*Connection, error) {
 	var udpConn *net.UDPConn
 
 	se := webrtc.SettingEngine{}
+
+	se.SetIncludeLoopbackCandidate(true)
+
+	if conf.DisableMDNS {
+		se.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	}
+
 	if conf.Logger != nil {
 		se = webrtc.SettingEngine{LoggerFactory: conf.Logger}
 	}

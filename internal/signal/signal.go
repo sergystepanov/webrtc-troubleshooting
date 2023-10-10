@@ -82,6 +82,7 @@ func Handler() websocket.Handler {
 		q := signal.Request().URL.Query()
 
 		disableInterceptors := q.Get("disable_interceptors") == "true"
+		disableMDNS := q.Get("disable_mdns") == "true"
 		flip := q.Get("flip_offer_side") == "true"
 		iceServers := strings.Split(q.Get("ice_servers"), ",")
 		logLevel := q.Get("log_level")
@@ -105,7 +106,7 @@ func Handler() websocket.Handler {
 			signal.close()
 		}()
 
-		p2p, err := webrtc.NewPeerConnection(iceServers, disableInterceptors, port, nat1to1, logger)
+		p2p, err := webrtc.NewPeerConnection(iceServers, disableInterceptors, port, nat1to1, disableMDNS, logger)
 		if err != nil {
 			_log("sys", "fail: %v", err)
 			return
