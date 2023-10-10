@@ -131,7 +131,7 @@ func Handler() websocket.Handler {
 
 		p2p.OnIceConnectionStateChange(logState[webrtc.ICEConnectionState]("ice", _log))
 		p2p.OnConnectionStateChange(logState[webrtc.PeerConnectionState]("rtc", _log))
-		p2p.OnIceGatheringStateChange(logState[webrtc.ICEGathererState]("ice", _log))
+		p2p.OnIceGatheringStateChange(logState[webrtc.ICEGatheringState]("ice", _log))
 		p2p.OnSignalingStateChange(logState[webrtc.SignalingState]("sig", _log))
 
 		p2p.OnDataChannel(func(d *webrtc.DataChannel) { d.OnOpen(sendGarbage(d, done)) })

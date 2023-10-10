@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/pion/logging"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 type (
@@ -21,7 +21,7 @@ type (
 	}
 	ICECandidate        = webrtc.ICECandidate
 	ICEConnectionState  = webrtc.ICEConnectionState
-	ICEGathererState    = webrtc.ICEGathererState
+	ICEGatheringState   = webrtc.ICEGatheringState
 	PeerConnectionState = webrtc.PeerConnectionState
 	SignalingState      = webrtc.SignalingState
 )
@@ -82,7 +82,7 @@ func (p *Peer) OnIceConnectionStateChange(fn func(state ICEConnectionState)) {
 func (p *Peer) OnConnectionStateChange(fn func(state PeerConnectionState)) {
 	p.conn.OnConnectionStateChange(fn)
 }
-func (p *Peer) OnIceGatheringStateChange(fn func(state ICEGathererState)) {
+func (p *Peer) OnIceGatheringStateChange(fn func(state ICEGatheringState)) {
 	p.conn.OnICEGatheringStateChange(fn)
 }
 func (p *Peer) OnSignalingStateChange(fn func(state SignalingState)) {
