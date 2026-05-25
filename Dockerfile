@@ -1,4 +1,4 @@
-FROM golang:1.20-bullseye
+FROM golang:1.26-bookwork
 
 # UPX
 ARG UPX_VERSION=3.96
