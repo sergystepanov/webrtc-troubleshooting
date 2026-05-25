@@ -1,4 +1,4 @@
-FROM golang:1.26-bookwork
+FROM golang:1.26-bookworm
 
 # UPX
 ARG UPX_VERSION=3.96
